@@ -2,7 +2,7 @@ import os
 import mujoco
 import mujoco.viewer
 
-file_path = "scene.xml"
+file_path = "robot_test/scene.xml"
 
 # Load your model
 model = mujoco.MjModel.from_xml_path(file_path)

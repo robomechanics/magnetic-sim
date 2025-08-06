@@ -120,7 +120,7 @@ def key_callback(keycode):
 
 with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
     # Set the simulation timestep
-    model.opt.timestep = 0.0001  # 100 Hz simulation frequency
+    model.opt.timestep = 0.0005 
     model.opt.enableflags |= 1 << 0  # enable override
     # model.opt.iterations = 200
     model.opt.o_solref[0] = 4e-4
@@ -169,14 +169,11 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
             fromto = np.concatenate([mag_fromto[0:3], mag_fromto[0:3] + proj_vec])
             vec = fromto[3:6] - fromto[0:3]
 
-            distance = raw_distance if np.dot(raw_vec, mag_vec) > 0 else 0
-
-            # print(f"dx: {distance:.2f}, fromto: {np.round(fromto,2)}")
-            
-            add_visual_arrow(viewer.user_scn, fromto[0:3], fromto[3:6], rgba=(0, 0, 1, 1))
-
+            distance = raw_distance if np.dot(raw_vec, mag_vec) > 0 else 0      
             wrench = np.zeros(6, dtype=np.float64)
+            
             if distance > 1e-3 and distance < 0.02: # Add a small threshold to prevent division by zero
+                add_visual_arrow(viewer.user_scn, fromto[0:3], fromto[3:6], rgba=(0, 0, 1, 1))
                 # 1. Define magnet properties (you would get these from your model or constants)
                 magnet_remanence = 1.3  # Example: N42 grade neodymium
                 magnet_volume = (0.02**3) # Example: 2cm cube magnet
@@ -219,7 +216,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
                 # Apply the force to the magnet's body
                 tot_wrench += wrench
 
-        print(f"Applying wrench: {wrench} at distance: {distance:.5f} m")
+        print(f"time: {data.time} Applying wrench: {wrench} at distance: {distance:.5f} m")
         data.xfrc_applied[mag_body_id] += tot_wrench
 
         step_start_time = time.time()

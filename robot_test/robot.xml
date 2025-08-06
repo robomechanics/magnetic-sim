@@ -1,0 +1,1179 @@
+<?xml version="1.0" ?>
+<!-- Generated using onshape-to-robot -->
+<!-- Onshape https://cad.onshape.com/documents/269c768464ac3a2fe77716ac/w/0561fde1b676cbe890ab07b8/e/6d5dac895c0efc53aaad97ad -->
+<mujoco model="robot_test">
+  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+  <default>
+    <default class="robot_test">
+      <joint frictionloss="0.1" armature="0.005"/>
+      <position kp="50" dampratio="1"/>
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+      </default>
+      <default class="collision">
+        <geom group="3"/>
+      </default>
+    </default>
+  </default>
+  <worldbody>
+    <!-- Link body -->
+    <body name="body" pos="0 0 0" quat="1 0 0 0" childclass="robot_test">
+      <freejoint name="body_freejoint"/>
+      <inertial pos="-0.0164312 0.00823156 0.025" mass="0.299825" fullinertia="0.000548236 0.000574876 0.00100848 0.000153133 7.80579e-11 -1.30273e-10"/>
+      <!-- Part body -->
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.707107 0 0 0.707107" mesh="body" material="body_material"/>
+      <geom type="mesh" class="collision" pos="0 0 0" quat="0.707107 0 0 0.707107" mesh="body" material="body_material"/>
+      <!-- Link body_2 -->
+      <body name="body_2" pos="-0.085 5.20475e-18 0.025" quat="2.16489e-17 -0 -0.707107 0.707107">
+        <!-- Joint from body to body_2 -->
+        <joint axis="0 0 1" name="spine" type="hinge"/>
+        <inertial pos="0.0685688 -9.0333e-09 0.00823156" mass="0.299825" fullinertia="0.000548236 0.00100848 0.000574876 -7.80579e-11 0.000153133 1.30273e-10"/>
+        <!-- Part body_2 -->
+        <geom type="mesh" class="visual" pos="0.085 0.025 1.04095e-17" quat="0.5 0.5 -0.5 0.5" mesh="body" material="body_material"/>
+        <geom type="mesh" class="collision" pos="0.085 0.025 1.04095e-17" quat="0.5 0.5 -0.5 0.5" mesh="body" material="body_material"/>
+        <!-- Link shoulder -->
+        <body name="shoulder" pos="0.14 -2.08167e-17 -0.05" quat="0.5 0.5 -0.5 -0.5">
+          <!-- Joint from body_2 to shoulder -->
+          <joint axis="0 0 1" name="abd_BL" type="hinge" range="0.0 0.0"/>
+          <inertial pos="1.43613e-18 -0.0130773 -0.025" mass="0.05" fullinertia="2.97856e-05 1.84466e-05 2.899e-05 1.83568e-36 -3.74458e-39 5.76666e-38"/>
+          <!-- Part shoulder -->
+          <geom type="mesh" class="visual" pos="0 -6.93889e-18 -0.05" quat="1 0 -2.77556e-17 -1.05014e-16" mesh="shoulder" material="shoulder_material"/>
+          <geom type="mesh" class="collision" pos="0 -6.93889e-18 -0.05" quat="1 0 -2.77556e-17 -1.05014e-16" mesh="shoulder" material="shoulder_material"/>
+          <!-- Link leg_short -->
+          <body name="leg_short" pos="-3.46945e-18 -0.05 -0.025" quat="0.270598 -0.270598 -0.653281 -0.653281">
+            <!-- Joint from shoulder to leg_short -->
+            <joint axis="0 0 1" name="sho_BL" type="hinge" range="0.0 0.0"/>
+            <inertial pos="0.05 1.92369e-18 -0.0045" mass="0.05" fullinertia="1.97416e-05 7.89822e-05 7.76154e-05 1.0017e-21 -1.74076e-05 -1.76627e-22"/>
+            <!-- Part leg_short -->
+            <geom type="mesh" class="visual" pos="0.05 0 -0.0295" quat="1 -0 6.22401e-17 1.91649e-30" mesh="leg_short" material="leg_short_material"/>
+            <geom type="mesh" class="collision" pos="0.05 0 -0.0295" quat="1 -0 6.22401e-17 1.91649e-30" mesh="leg_short" material="leg_short_material"/>
+            <!-- Link leg_long -->
+            <body name="leg_long" pos="0.1 -2.77556e-17 -0.009" quat="0.707107 -2.35269e-16 4.44089e-16 -0.707107">
+              <!-- Joint from leg_short to leg_long -->
+              <joint axis="0 0 1" name="elb_BL" type="hinge" range="0.0 0.0"/>
+              <inertial pos="0.074957 -7.9176e-06 -0.00448601" mass="0.075" fullinertia="3.02339e-05 0.000185791 0.000184518 -1.89964e-08 -2.59147e-05 7.26599e-09"/>
+              <!-- Part leg_long -->
+              <geom type="mesh" class="visual" pos="0.075 0 -0.0295" quat="1 -0 4.62047e-17 1.49467e-30" mesh="leg_long" material="leg_long_material"/>
+              <geom type="mesh" class="collision" pos="0.075 0 -0.0295" quat="1 -0 4.62047e-17 1.49467e-30" mesh="leg_long" material="leg_long_material"/>
+              <!-- Link mag_wheel_base -->
+              <body name="mag_wheel_base" pos="0.15 -1.38778e-17 -0.009" quat="1 0 1.58919e-16 -1.11022e-16">
+                <!-- Joint from leg_long to mag_wheel_base -->
+                <joint axis="0 0 1" name="whl_BL" type="hinge"/>
+                <inertial pos="-1.87663e-16 8.32667e-17 -0.025" mass="0.15" fullinertia="4.625e-05 4.625e-05 3e-05 1.62884e-21 -5.25952e-21 2.66932e-21"/>
+                <!-- Part mag_wheel_base -->
+                <geom type="mesh" class="visual" pos="-2.498e-15 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+                <geom type="mesh" class="collision" pos="-2.498e-15 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+                <!-- Link spring_sim_spoke -->
+                <body name="spring_sim_spoke" pos="-6.66134e-16 0.02 -0.05" quat="1.63873e-16 -1 9.52421e-18 3.85364e-16">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke -->
+                  <joint axis="0 0 1" name="spoke1_BL" type="hinge" range="-0.2617993877991263 0.2617993877991725"/>
+                  <inertial pos="-1.02493e-18 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.59788e-23 -2.58432e-25 -4.57438e-38"/>
+                  <!-- Part spring_sim_spoke -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base -->
+                  <body name="spring_sim_base" pos="-5.55112e-17 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke to spring_sim_base -->
+                    <joint axis="0 0 1" name="mag_slide1_BL" type="slide" range="0.0 0.009000000000000001"/>
+                    <inertial pos="-1.38778e-16 -1.05238e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.01374e-37 -4.91166e-36 -6.85653e-22"/>
+                    <!-- Part spring_sim_base -->
+                    <geom type="mesh" class="visual" pos="-1.38778e-16 0 -0.054" quat="1 -1.04083e-16 -0 -3.15544e-29" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-1.38778e-16 0 -0.054" quat="1 -1.04083e-16 -0 -3.15544e-29" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet -->
+                    <body name="magnet" pos="-1.38778e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base to magnet -->
+                      <joint axis="0 0 1" name="mag_spoke1_BL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet -->
+                      <geom type="mesh" class="visual" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_2 -->
+                <body name="spring_sim_spoke_2" pos="2.77556e-16 -0.02 -0.05" quat="7.77156e-16 -4.47765e-17 1 3.33067e-16">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_2 -->
+                  <joint axis="0 0 1" name="spoke2_BL" type="hinge" range="-0.2617993877991263 0.2617993877991725"/>
+                  <inertial pos="-6.30194e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -2.61045e-23 -2.58432e-25 -1.35728e-38"/>
+                  <!-- Part spring_sim_spoke_2 -->
+                  <geom type="mesh" class="visual" pos="-5.55112e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="-5.55112e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_2 -->
+                  <body name="spring_sim_base_2" pos="-5.55112e-17 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_2 to spring_sim_base_2 -->
+                    <joint axis="0 0 1" name="mag_slide5_BL" type="slide" range="0.0 0.009000000000000001"/>
+                    <inertial pos="-9.71445e-16 4.98576e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -2.03222e-24 2.332e-36 -2.97409e-22"/>
+                    <!-- Part spring_sim_base_2 -->
+                    <geom type="mesh" class="visual" pos="-9.71445e-16 5.55112e-17 -0.054" quat="1 -0 -0 1.09115e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-9.71445e-16 5.55112e-17 -0.054" quat="1 -0 -0 1.09115e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_2 -->
+                    <body name="magnet_2" pos="-9.71445e-16 5.55112e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_2 to magnet_2 -->
+                      <joint axis="0 0 1" name="mag_spoke5_BL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_2 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_3 -->
+                <body name="spring_sim_spoke_3" pos="-0.02 -3.60822e-16 -0.05" quat="1.16365e-14 7.49489e-16 4.44089e-16 -1">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_3 -->
+                  <joint axis="0 0 1" name="spoke3_BL" type="hinge" range="-0.2617993877991219 0.26179938779917694"/>
+                  <inertial pos="0.0095094 -2.49994e-16 -3.29761e-17" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 1.68121e-20 -3.71638e-21 7.75402e-21"/>
+                  <!-- Part spring_sim_spoke_3 -->
+                  <geom type="mesh" class="visual" pos="0.08 -2.17881e-15 0" quat="9.63882e-15 -0.707107 1.55431e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0.08 -2.17881e-15 0" quat="9.63882e-15 -0.707107 1.55431e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_3 -->
+                  <body name="spring_sim_base_3" pos="0.025 -6.52256e-16 -2.77556e-17" quat="9.63882e-15 -0.707107 1.55431e-14 0.707107">
+                    <!-- Joint from spring_sim_spoke_3 to spring_sim_base_3 -->
+                    <joint axis="0 0 1" name="mag_slide7_BL" type="slide" range="-2.5804011705155006e-17 0.008999999999999975"/>
+                    <inertial pos="-2.77556e-17 -3.82033e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.17965e-35 -2.07635e-36 2.40958e-23"/>
+                    <!-- Part spring_sim_base_3 -->
+                    <geom type="mesh" class="visual" pos="-2.77556e-17 -4.16334e-17 -0.054" quat="1 -0 -0 -3.15544e-30" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-2.77556e-17 -4.16334e-17 -0.054" quat="1 -0 -0 -3.15544e-30" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_3 -->
+                    <body name="magnet_3" pos="-2.77556e-17 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_3 to magnet_3 -->
+                      <joint axis="0 0 1" name="mag_spoke7_BL" type="hinge" range="-0.2617993877991281 0.2617993877991707"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97086e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_3 -->
+                      <geom type="mesh" class="visual" pos="6.93889e-17 0.015 1.11022e-16" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="6.93889e-17 0.015 1.11022e-16" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_4 -->
+                <body name="spring_sim_spoke_4" pos="0.02 5.55112e-16 -0.05" quat="6.70329e-16 -0.707107 0.707107 -3.95279e-16">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_4 -->
+                  <joint axis="0 0 1" name="spoke4_BL" type="hinge" range="-0.2617993877991263 0.2617993877991725"/>
+                  <inertial pos="-6.36841e-18 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.2313e-23 -2.58432e-25 5.60775e-39"/>
+                  <!-- Part spring_sim_spoke_4 -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_4 -->
+                  <body name="spring_sim_base_4" pos="1.38778e-17 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_4 to spring_sim_base_4 -->
+                    <joint axis="0 0 1" name="mag_slide3_BL" type="slide" range="0.0 0.009000000000000001"/>
+                    <inertial pos="-5.27356e-16 7.30163e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.67468e-36 -2.55855e-36 -4.61989e-23"/>
+                    <!-- Part spring_sim_base_4 -->
+                    <geom type="mesh" class="visual" pos="-5.27356e-16 8.32667e-17 -0.054" quat="1 5.55112e-17 2.22045e-16 0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-5.27356e-16 8.32667e-17 -0.054" quat="1 5.55112e-17 2.22045e-16 0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_4 -->
+                    <body name="magnet_4" pos="-5.55112e-16 4.16334e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_4 to magnet_4 -->
+                      <joint axis="0 0 1" name="mag_spoke3_BL" type="hinge" range="-0.2617993877991485 0.2617993877991503"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_4 -->
+                      <geom type="mesh" class="visual" pos="2.77556e-17 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="2.77556e-17 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_5 -->
+                <body name="spring_sim_spoke_5" pos="0.0141421 -0.0141421 -0.05" quat="0.92388 5.3278e-16 -6.66134e-16 -0.382683">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_5 -->
+                  <joint axis="0 0 1" name="spoke5_BL" type="hinge" range="-0.26179938779910056 0.26179938779919826"/>
+                  <inertial pos="0.0095094 -5.07271e-16 -2.96948e-17" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 1.52637e-20 -1.36292e-22 -6.60927e-23"/>
+                  <!-- Part spring_sim_spoke_5 -->
+                  <geom type="mesh" class="visual" pos="0.08 -3.96905e-15 -8.32667e-17" quat="1.7298e-14 -0.707107 1.75415e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0.08 -3.96905e-15 -8.32667e-17" quat="1.7298e-14 -0.707107 1.75415e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_5 -->
+                  <body name="spring_sim_base_5" pos="0.025 -1.249e-15 -5.55112e-17" quat="1.7298e-14 -0.707107 1.75415e-14 0.707107">
+                    <!-- Joint from spring_sim_spoke_5 to spring_sim_base_5 -->
+                    <joint axis="0 0 1" name="mag_slide4_BL" type="slide" range="-1.1188966420050406e-16 0.008999999999999888"/>
+                    <inertial pos="-4.95179e-17 -3.13853e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 5.53903e-22 1.49553e-23 -1.95313e-22"/>
+                    <!-- Part spring_sim_base_5 -->
+                    <geom type="mesh" class="visual" pos="-5.55112e-17 -2.77556e-17 -0.054" quat="1 -5.62777e-17 0 5.0307e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-5.55112e-17 -2.77556e-17 -0.054" quat="1 -5.62777e-17 0 5.0307e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_5 -->
+                    <body name="magnet_5" pos="-2.77556e-17 -2.77556e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_5 to magnet_5 -->
+                      <joint axis="0 0 1" name="mag_spoke4_BL" type="hinge" range="-0.2617993877990366 0.2617993877992622"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_5 -->
+                      <geom type="mesh" class="visual" pos="1.72085e-15 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="1.72085e-15 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_6 -->
+                <body name="spring_sim_spoke_6" pos="0.0141421 0.0141421 -0.05" quat="4.51467e-16 -0.92388 0.382683 -6.38284e-16">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_6 -->
+                  <joint axis="0 0 1" name="spoke6_BL" type="hinge" range="-0.2617993877991272 0.2617993877991716"/>
+                  <inertial pos="-5.61867e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 2.25603e-39 -2.58432e-25 7.19847e-39"/>
+                  <!-- Part spring_sim_spoke_6 -->
+                  <geom type="mesh" class="visual" pos="-5.55112e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="-5.55112e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_6 -->
+                  <body name="spring_sim_base_6" pos="-5.55112e-17 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_6 to spring_sim_base_6 -->
+                    <joint axis="0 0 1" name="mag_slide2_BL" type="slide" range="-8.612902058224847e-16 0.008999999999999139"/>
+                    <inertial pos="-1.90074e-16 2.2479e-16 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -3.94055e-21 -7.49593e-22 -9.60589e-22"/>
+                    <!-- Part spring_sim_base_6 -->
+                    <geom type="mesh" class="visual" pos="-1.94289e-16 6.10623e-16 -0.054" quat="1 2.913e-15 3.33067e-16 -1.19349e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-1.94289e-16 6.10623e-16 -0.054" quat="1 2.913e-15 3.33067e-16 -1.19349e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_6 -->
+                    <body name="magnet_6" pos="-1.94289e-16 4.44089e-16 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_6 to magnet_6 -->
+                      <joint axis="0 0 1" name="mag_spoke2_BL" type="hinge" range="-0.2617993877991405 0.2617993877991583"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_6 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_7 -->
+                <body name="spring_sim_spoke_7" pos="-0.0141421 0.0141421 -0.05" quat="1.48669e-16 0.92388 0.382683 8.10572e-16">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_7 -->
+                  <joint axis="0 0 1" name="spoke7_BL" type="hinge" range="-0.2617993877991263 0.2617993877991725"/>
+                  <inertial pos="-6.75517e-19 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -4.63024e-38 -2.58432e-25 1.16729e-38"/>
+                  <!-- Part spring_sim_spoke_7 -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_7 -->
+                  <body name="spring_sim_base_7" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_7 to spring_sim_base_7 -->
+                    <joint axis="0 0 1" name="mag_slide8_BL" type="slide" range="-1.6740081543176188e-16 0.008999999999999833"/>
+                    <inertial pos="-1.95015e-16 -2.68025e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -8.00725e-27 6.60134e-22 1.22356e-22"/>
+                    <!-- Part spring_sim_base_7 -->
+                    <geom type="mesh" class="visual" pos="-1.66533e-16 -2.77556e-17 -0.054" quat="1 0 -4.44089e-16 4.29929e-18" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-1.66533e-16 -2.77556e-17 -0.054" quat="1 0 -4.44089e-16 4.29929e-18" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_7 -->
+                    <body name="magnet_7" pos="-1.94289e-16 -5.55112e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_7 to magnet_7 -->
+                      <joint axis="0 0 1" name="mag_spoke8_BL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_7 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_8 -->
+                <body name="spring_sim_spoke_8" pos="-0.0141421 -0.0141421 -0.05" quat="5.67974e-16 0.382683 0.92388 2.54917e-16">
+                  <!-- Joint from mag_wheel_base to spring_sim_spoke_8 -->
+                  <joint axis="0 0 1" name="spoke8_BL" type="hinge" range="-0.2617993877991272 0.2617993877991716"/>
+                  <inertial pos="-6.75517e-19 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 1.0306e-37 -2.58432e-25 -3.36949e-42"/>
+                  <!-- Part spring_sim_spoke_8 -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_8 -->
+                  <body name="spring_sim_base_8" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_8 to spring_sim_base_8 -->
+                    <joint axis="0 0 1" name="mag_slide6_BL" type="slide" range="-8.673617379884035e-19 0.009"/>
+                    <inertial pos="-8.32839e-16 -4.54629e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 7.28626e-25 3.97257e-24 -1.976e-22"/>
+                    <!-- Part spring_sim_base_8 -->
+                    <geom type="mesh" class="visual" pos="-8.32667e-16 0 -0.054" quat="1 -0 -0 -3.91217e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-8.32667e-16 0 -0.054" quat="1 -0 -0 -3.91217e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_8 -->
+                    <body name="magnet_8" pos="-8.32667e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_8 to magnet_8 -->
+                      <joint axis="0 0 1" name="mag_spoke6_BL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_8 -->
+                      <geom type="mesh" class="visual" pos="-5.55112e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="-5.55112e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+        <!-- Link shoulder_2 -->
+        <body name="shoulder_2" pos="0.135 -1.38778e-17 0.05" quat="0.707107 0 -0.707107 0">
+          <!-- Joint from body_2 to shoulder_2 -->
+          <joint axis="0 0 1" name="abd_BR" type="hinge" range="0.0 0.0"/>
+          <inertial pos="0.0130773 -9.0018e-18 -0.03" mass="0.05" fullinertia="1.84466e-05 2.97856e-05 2.899e-05 1.00978e-20 5.80352e-37 4.41643e-23"/>
+          <!-- Part shoulder_2 -->
+          <geom type="mesh" class="visual" pos="6.93889e-18 -6.93889e-18 -0.055" quat="0.707107 -0 0 0.707107" mesh="shoulder" material="shoulder_material"/>
+          <geom type="mesh" class="collision" pos="6.93889e-18 -6.93889e-18 -0.055" quat="0.707107 -0 0 0.707107" mesh="shoulder" material="shoulder_material"/>
+          <!-- Link leg_short_2 -->
+          <body name="leg_short_2" pos="0.05 -6.93889e-18 -0.03" quat="0.653281 -0.270598 -0.653281 0.270598">
+            <!-- Joint from shoulder_2 to leg_short_2 -->
+            <joint axis="0 0 1" name="sho_BR" type="hinge" range="0.0 0.0"/>
+            <inertial pos="0.05 1.92369e-18 -0.0045" mass="0.05" fullinertia="1.97416e-05 7.89822e-05 7.76154e-05 -9.77049e-21 -1.74076e-05 1.76627e-22"/>
+            <!-- Part leg_short_2 -->
+            <geom type="mesh" class="visual" pos="0.05 0 -0.0295" quat="1 -0 6.30809e-17 4.15133e-32" mesh="leg_short" material="leg_short_material"/>
+            <geom type="mesh" class="collision" pos="0.05 0 -0.0295" quat="1 -0 6.30809e-17 4.15133e-32" mesh="leg_short" material="leg_short_material"/>
+            <!-- Link leg_long_2 -->
+            <body name="leg_long_2" pos="0.1 -2.77556e-17 -0.009" quat="0.707107 1.11022e-16 -1.11022e-16 0.707107">
+              <!-- Joint from leg_short_2 to leg_long_2 -->
+              <joint axis="0 0 1" name="elb_BR" type="hinge" range="0.0 0.0"/>
+              <inertial pos="0.074957 -7.9176e-06 -0.00448601" mass="0.075" fullinertia="3.02339e-05 0.000185791 0.000184518 -1.89964e-08 -2.59147e-05 7.26599e-09"/>
+              <!-- Part leg_long_2 -->
+              <geom type="mesh" class="visual" pos="0.075 1.38778e-17 -0.0295" quat="1 -0 1.83161e-18 1.39499e-31" mesh="leg_long" material="leg_long_material"/>
+              <geom type="mesh" class="collision" pos="0.075 1.38778e-17 -0.0295" quat="1 -0 1.83161e-18 1.39499e-31" mesh="leg_long" material="leg_long_material"/>
+              <!-- Link mag_wheel_base_2 -->
+              <body name="mag_wheel_base_2" pos="0.15 1.11022e-16 -0.009" quat="1 -7.52069e-17 -3.33067e-16 3.49165e-14">
+                <!-- Joint from leg_long_2 to mag_wheel_base_2 -->
+                <joint axis="0 0 1" name="whl_BR" type="hinge"/>
+                <inertial pos="-3.91984e-17 8.32667e-17 -0.025" mass="0.15" fullinertia="4.625e-05 4.625e-05 3e-05 -5.25967e-21 1.30926e-36 -7.83612e-37"/>
+                <!-- Part mag_wheel_base_2 -->
+                <geom type="mesh" class="visual" pos="-5.55112e-17 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+                <geom type="mesh" class="collision" pos="-5.55112e-17 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+                <!-- Link spring_sim_spoke_9 -->
+                <body name="spring_sim_spoke_9" pos="1.60982e-15 0.02 -0.05" quat="2.73359e-16 -1 3.56569e-14 -2.46291e-16">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_9 -->
+                  <joint axis="0 0 1" name="spoke1_BR" type="hinge" range="-0.26179938779907835 0.26179938779922046"/>
+                  <inertial pos="-5.46097e-17 -0.0095094 -2.88372e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.71541e-23 -2.58432e-25 2.30461e-38"/>
+                  <!-- Part spring_sim_spoke_9 -->
+                  <geom type="mesh" class="visual" pos="-5.55112e-17 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="-5.55112e-17 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_9 -->
+                  <body name="spring_sim_base_9" pos="0 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_9 to spring_sim_base_9 -->
+                    <joint axis="0 0 1" name="mag_slide1_BR" type="slide" range="-2.5804011705155006e-17 0.008999999999999975"/>
+                    <inertial pos="4.95822e-16 -9.00621e-19 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -6.46309e-23 -2.61999e-24 3.03668e-23"/>
+                    <!-- Part spring_sim_base_9 -->
+                    <geom type="mesh" class="visual" pos="4.996e-16 0 -0.054" quat="1 4.96608e-17 -5.55112e-17 1.11022e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="4.996e-16 0 -0.054" quat="1 4.96608e-17 -5.55112e-17 1.11022e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_9 -->
+                    <body name="magnet_9" pos="4.71845e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_9 to magnet_9 -->
+                      <joint axis="0 0 1" name="mag_spoke1_BR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_9 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_10 -->
+                <body name="spring_sim_spoke_10" pos="-1.22125e-15 -0.02 -0.05" quat="3.0401e-16 3.56569e-14 1 3.84458e-16">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_10 -->
+                  <joint axis="0 0 1" name="spoke2_BR" type="hinge" range="-0.26179938779907747 0.26179938779922135"/>
+                  <inertial pos="9.01438e-19 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.71541e-23 -2.58432e-25 -1.5889e-40"/>
+                  <!-- Part spring_sim_spoke_10 -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_10 -->
+                  <body name="spring_sim_base_10" pos="0 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_10 to spring_sim_base_10 -->
+                    <joint axis="0 0 1" name="mag_slide5_BR" type="slide" range="-3.5561831257524545e-17 0.008999999999999965"/>
+                    <inertial pos="-3.2959e-16 -5.56525e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 5.28803e-38 -8.05951e-23 -6.76804e-24"/>
+                    <!-- Part spring_sim_base_10 -->
+                    <geom type="mesh" class="visual" pos="-3.33067e-16 -5.55112e-17 -0.054" quat="1 -0 -0 -0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-3.33067e-16 -5.55112e-17 -0.054" quat="1 -0 -0 -0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_10 -->
+                    <body name="magnet_10" pos="-3.05311e-16 -5.55112e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_10 to magnet_10 -->
+                      <joint axis="0 0 1" name="mag_spoke5_BR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_10 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_11 -->
+                <body name="spring_sim_spoke_11" pos="-0.02 6.93889e-17 -0.05" quat="1.02893e-16 0 1.11022e-16 -1">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_11 -->
+                  <joint axis="0 0 1" name="spoke3_BR" type="hinge" range="-0.26179938779908724 0.2617993877992116"/>
+                  <inertial pos="0.0095094 -5.80373e-16 3.31822e-17" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 1.95082e-20 -8.30569e-23 2.73311e-22"/>
+                  <!-- Part spring_sim_spoke_11 -->
+                  <geom type="mesh" class="visual" pos="0.08 -4.94049e-15 2.77556e-17" quat="2.19708e-14 -0.707107 2.17604e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0.08 -4.94049e-15 2.77556e-17" quat="2.19708e-14 -0.707107 2.17604e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_11 -->
+                  <body name="spring_sim_base_11" pos="0.025 -1.55431e-15 0" quat="2.19708e-14 -0.707107 2.17604e-14 0.707107">
+                    <!-- Joint from spring_sim_spoke_11 to spring_sim_base_11 -->
+                    <joint axis="0 0 1" name="mag_slide7_BR" type="slide" range="-3.5561831257524545e-17 0.008999999999999965"/>
+                    <inertial pos="8.32667e-17 -1.83496e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 2.31038e-36 1.81062e-38 -1.31694e-23"/>
+                    <!-- Part spring_sim_base_11 -->
+                    <geom type="mesh" class="visual" pos="8.32667e-17 -1.38778e-17 -0.054" quat="1 0 0 1.57772e-30" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="8.32667e-17 -1.38778e-17 -0.054" quat="1 0 0 1.57772e-30" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_11 -->
+                    <body name="magnet_11" pos="8.32667e-17 -1.38778e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_11 to magnet_11 -->
+                      <joint axis="0 0 1" name="mag_spoke7_BR" type="hinge" range="-0.2617993877991414 0.2617993877991574"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_11 -->
+                      <geom type="mesh" class="visual" pos="1.9984e-15 0.015 -8.04912e-16" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="1.9984e-15 0.015 -8.04912e-16" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_12 -->
+                <body name="spring_sim_spoke_12" pos="0.02 -1.59595e-15 -0.05" quat="3.72962e-16 -0.707107 0.707107 -4.28283e-18">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_12 -->
+                  <joint axis="0 0 1" name="spoke4_BR" type="hinge" range="-0.26179938779907835 0.26179938779922046"/>
+                  <inertial pos="-1.15459e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -3.333e-24 -2.58432e-25 6.15372e-38"/>
+                  <!-- Part spring_sim_spoke_12 -->
+                  <geom type="mesh" class="visual" pos="-1.38778e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="-1.38778e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_12 -->
+                  <body name="spring_sim_base_12" pos="-1.38778e-17 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_12 to spring_sim_base_12 -->
+                    <joint axis="0 0 1" name="mag_slide3_BR" type="slide" range="-3.5561831257524545e-17 0.008999999999999965"/>
+                    <inertial pos="2.51058e-16 2.5692e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -9.02536e-23 3.5437e-23 -2.42515e-24"/>
+                    <!-- Part spring_sim_base_12 -->
+                    <geom type="mesh" class="visual" pos="2.498e-16 2.77556e-17 -0.054" quat="1 -1.89497e-17 -1.11022e-16 -5.55112e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="2.498e-16 2.77556e-17 -0.054" quat="1 -1.89497e-17 -1.11022e-16 -5.55112e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_12 -->
+                    <body name="magnet_12" pos="2.498e-16 1.38778e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_12 to magnet_12 -->
+                      <joint axis="0 0 1" name="mag_spoke3_BR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_12 -->
+                      <geom type="mesh" class="visual" pos="6.93889e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="6.93889e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_13 -->
+                <body name="spring_sim_spoke_13" pos="0.0141421 -0.0141421 -0.05" quat="0.92388 1.17163e-17 0 -0.382683">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_13 -->
+                  <joint axis="0 0 1" name="spoke5_BR" type="hinge" range="-0.26179938779908013 0.2617993877992187"/>
+                  <inertial pos="0.0095094 -1.98783e-15 -1.50333e-15" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 2.28094e-20 3.61349e-22 -1.22218e-22"/>
+                  <!-- Part spring_sim_spoke_13 -->
+                  <geom type="mesh" class="visual" pos="0.08 -6.88338e-15 -1.52656e-15" quat="2.46947e-14 -0.707107 2.5091e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0.08 -6.88338e-15 -1.52656e-15" quat="2.46947e-14 -0.707107 2.5091e-14 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_13 -->
+                  <body name="spring_sim_base_13" pos="0.025 -3.10862e-15 -1.4988e-15" quat="2.46947e-14 -0.707107 2.5091e-14 0.707107">
+                    <!-- Joint from spring_sim_spoke_13 to spring_sim_base_13 -->
+                    <joint axis="0 0 1" name="mag_slide4_BR" type="slide" range="-2.1658022597570437e-15 0.008999999999997834"/>
+                    <inertial pos="2.77556e-17 -8.8007e-19 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.85749e-36 7.86616e-37 -2.64028e-36"/>
+                    <!-- Part spring_sim_base_13 -->
+                    <geom type="mesh" class="visual" pos="2.77556e-17 0 -0.054" quat="1 -0 2.22045e-16 -1.66533e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="2.77556e-17 0 -0.054" quat="1 -0 2.22045e-16 -1.66533e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_13 -->
+                    <body name="magnet_13" pos="2.77556e-17 -5.55112e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_13 to magnet_13 -->
+                      <joint axis="0 0 1" name="mag_spoke4_BR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_13 -->
+                      <geom type="mesh" class="visual" pos="-5.55112e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="-5.55112e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_14 -->
+                <body name="spring_sim_spoke_14" pos="0.0141421 0.0141421 -0.05" quat="1.39469e-16 0.92388 -0.382683 -3.72398e-16">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_14 -->
+                  <joint axis="0 0 1" name="spoke6_BR" type="hinge" range="-0.26179938779908013 0.2617993877992187"/>
+                  <inertial pos="-2.84311e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 2.45556e-38 -2.58432e-25 1.1926e-38"/>
+                  <!-- Part spring_sim_spoke_14 -->
+                  <geom type="mesh" class="visual" pos="-2.77556e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="-2.77556e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_14 -->
+                  <body name="spring_sim_base_14" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_14 to spring_sim_base_14 -->
+                    <joint axis="0 0 1" name="mag_slide2_BR" type="slide" range="0.0 0.009000000000000001"/>
+                    <inertial pos="-4.44089e-16 -8.8007e-19 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -9.85413e-22 -1.62972e-22 -2.5441e-21"/>
+                    <!-- Part spring_sim_base_14 -->
+                    <geom type="mesh" class="visual" pos="-4.44089e-16 0 -0.054" quat="1 -7.21718e-16 0 -1.04083e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-4.44089e-16 0 -0.054" quat="1 -7.21718e-16 0 -1.04083e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_14 -->
+                    <body name="magnet_14" pos="-4.44089e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_14 to magnet_14 -->
+                      <joint axis="0 0 1" name="mag_spoke2_BR" type="hinge" range="-0.26179938779914497 0.26179938779915385"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_14 -->
+                      <geom type="mesh" class="visual" pos="2.77556e-17 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="2.77556e-17 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_15 -->
+                <body name="spring_sim_spoke_15" pos="-0.0141421 0.0141421 -0.05" quat="1.30014e-16 -0.92388 -0.382683 -3.4387e-16">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_15 -->
+                  <joint axis="0 0 1" name="spoke7_BR" type="hinge" range="-0.26179938779907835 0.26179938779922046"/>
+                  <inertial pos="-6.75517e-19 -0.0095094 -2.88372e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 0 -2.58432e-25 0"/>
+                  <!-- Part spring_sim_spoke_15 -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_15 -->
+                  <body name="spring_sim_base_15" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_15 to spring_sim_base_15 -->
+                    <joint axis="0 0 1" name="mag_slide8_BR" type="slide" range="-8.673617379884035e-19 0.009"/>
+                    <inertial pos="5.57134e-17 -5.2725e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 1.8118e-23 1.17247e-21 1.03374e-22"/>
+                    <!-- Part spring_sim_base_15 -->
+                    <geom type="mesh" class="visual" pos="1.11022e-16 -5.55112e-17 -0.054" quat="1 -6.70626e-17 -8.86041e-16 -8.58882e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="1.11022e-16 -5.55112e-17 -0.054" quat="1 -6.70626e-17 -8.86041e-16 -8.58882e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_15 -->
+                    <body name="magnet_15" pos="8.32667e-17 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_15 to magnet_15 -->
+                      <joint axis="0 0 1" name="mag_spoke8_BR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_15 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+                <!-- Link spring_sim_spoke_16 -->
+                <body name="spring_sim_spoke_16" pos="-0.0141421 -0.0141421 -0.05" quat="1.15732e-16 0.382683 0.92388 4.00862e-16">
+                  <!-- Joint from mag_wheel_base_2 to spring_sim_spoke_16 -->
+                  <joint axis="0 0 1" name="spoke8_BR" type="hinge" range="-0.26179938779907835 0.26179938779922046"/>
+                  <inertial pos="-6.75517e-19 -0.0095094 -2.88372e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 1.2155e-54 -2.58432e-25 2.45083e-38"/>
+                  <!-- Part spring_sim_spoke_16 -->
+                  <geom type="mesh" class="visual" pos="0 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <geom type="mesh" class="collision" pos="0 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                  <!-- Link spring_sim_base_16 -->
+                  <body name="spring_sim_base_16" pos="0 -0.025 -5.55112e-17" quat="0.5 -0.5 -0.5 -0.5">
+                    <!-- Joint from spring_sim_spoke_16 to spring_sim_base_16 -->
+                    <joint axis="0 0 1" name="mag_slide6_BR" type="slide" range="-8.673617379884035e-19 0.009"/>
+                    <inertial pos="-8.54777e-17 -8.8007e-19 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 1.67058e-24 5.12447e-23 -1.01828e-37"/>
+                    <!-- Part spring_sim_base_16 -->
+                    <geom type="mesh" class="visual" pos="-8.32667e-17 0 -0.054" quat="1 -0 -2.43408e-16 -1.31242e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <geom type="mesh" class="collision" pos="-8.32667e-17 0 -0.054" quat="1 -0 -2.43408e-16 -1.31242e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                    <!-- Link magnet_16 -->
+                    <body name="magnet_16" pos="-8.32667e-17 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                      <!-- Joint from spring_sim_base_16 to magnet_16 -->
+                      <joint axis="0 0 1" name="mag_spoke6_BR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                      <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                      <!-- Part magnet_16 -->
+                      <geom type="mesh" class="visual" pos="0 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                      <geom type="mesh" class="collision" pos="0 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <!-- Link shoulder_3 -->
+      <body name="shoulder_3" pos="0.055 -0.05 0.025" quat="0.707107 0 -0.707107 1.66533e-16">
+        <!-- Joint from body to shoulder_3 -->
+        <joint axis="0 0 1" name="abd_FR" type="hinge" range="0.0 0.0"/>
+        <inertial pos="1.43613e-18 -0.0130773 -0.025" mass="0.05" fullinertia="2.97856e-05 1.84466e-05 2.899e-05 -3.67136e-37 7.8436e-53 1.00033e-37"/>
+        <!-- Part shoulder_3 -->
+        <geom type="mesh" class="visual" pos="0 -6.93889e-18 -0.05" quat="1 0 1.11022e-16 4.78422e-17" mesh="shoulder" material="shoulder_material"/>
+        <geom type="mesh" class="collision" pos="0 -6.93889e-18 -0.05" quat="1 0 1.11022e-16 4.78422e-17" mesh="shoulder" material="shoulder_material"/>
+        <!-- Link leg_short_3 -->
+        <body name="leg_short_3" pos="-3.46945e-18 -0.05 -0.025" quat="0.270598 -0.270598 -0.653281 -0.653281">
+          <!-- Joint from shoulder_3 to leg_short_3 -->
+          <joint axis="0 0 1" name="sho_FR" type="hinge" range="0.0 0.0"/>
+          <inertial pos="0.05 1.92369e-18 -0.0045" mass="0.05" fullinertia="1.97416e-05 7.89822e-05 7.76154e-05 1.0017e-21 -1.74076e-05 -1.76627e-22"/>
+          <!-- Part leg_short_3 -->
+          <geom type="mesh" class="visual" pos="0.05 0 -0.0295" quat="1 0 7.68263e-17 1.13735e-30" mesh="leg_short" material="leg_short_material"/>
+          <geom type="mesh" class="collision" pos="0.05 0 -0.0295" quat="1 0 7.68263e-17 1.13735e-30" mesh="leg_short" material="leg_short_material"/>
+          <!-- Link leg_long_3 -->
+          <body name="leg_long_3" pos="0.1 0 -0.009" quat="0.707107 4.78481e-16 -0 -0.707107">
+            <!-- Joint from leg_short_3 to leg_long_3 -->
+            <joint axis="0 0 1" name="elb_FR" type="hinge" range="0.0 0.0"/>
+            <inertial pos="0.074957 -7.9176e-06 -0.00448601" mass="0.075" fullinertia="3.02339e-05 0.000185791 0.000184518 -1.89964e-08 -2.59147e-05 7.26599e-09"/>
+            <!-- Part leg_long_3 -->
+            <geom type="mesh" class="visual" pos="0.075 0 -0.0295" quat="1 0 6.07762e-17 -1.26615e-29" mesh="leg_long" material="leg_long_material"/>
+            <geom type="mesh" class="collision" pos="0.075 0 -0.0295" quat="1 0 6.07762e-17 -1.26615e-29" mesh="leg_long" material="leg_long_material"/>
+            <!-- Link mag_wheel_base_3 -->
+            <body name="mag_wheel_base_3" pos="0.15 -4.16334e-17 -0.009" quat="0.707107 7.98428e-16 7.77156e-16 0.707107">
+              <!-- Joint from leg_long_3 to mag_wheel_base_3 -->
+              <joint axis="0 0 1" name="whl_FR" type="hinge"/>
+              <inertial pos="1.44487e-17 2.77556e-17 -0.025" mass="0.15" fullinertia="4.625e-05 4.625e-05 3e-05 -2.69228e-21 -2.43555e-35 2.68332e-36"/>
+              <!-- Part mag_wheel_base_3 -->
+              <geom type="mesh" class="visual" pos="6.93889e-18 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+              <geom type="mesh" class="collision" pos="6.93889e-18 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+              <!-- Link spring_sim_spoke_17 -->
+              <body name="spring_sim_spoke_17" pos="-6.93889e-18 0.02 -0.05" quat="1.44605e-15 1 -1.96262e-17 1.85121e-18">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_17 -->
+                <joint axis="0 0 1" name="spoke1_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                <inertial pos="4.37089e-18 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.71541e-23 -2.58432e-25 2.30461e-38"/>
+                <!-- Part spring_sim_spoke_17 -->
+                <geom type="mesh" class="visual" pos="3.46945e-18 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="3.46945e-18 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_17 -->
+                <body name="spring_sim_base_17" pos="6.93889e-18 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_17 to spring_sim_base_17 -->
+                  <joint axis="0 0 1" name="mag_slide1_FR" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="1.19444e-17 -1.47568e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -5.81678e-22 -4.45372e-22 -3.40131e-24"/>
+                  <!-- Part spring_sim_base_17 -->
+                  <geom type="mesh" class="visual" pos="2.77556e-17 0 -0.054" quat="1 3.23736e-18 -4.33681e-17 2.34188e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="2.77556e-17 0 -0.054" quat="1 3.23736e-18 -4.33681e-17 2.34188e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_17 -->
+                  <body name="magnet_17" pos="0 -1.38778e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_17 to magnet_17 -->
+                    <joint axis="0 0 1" name="mag_spoke1_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_17 -->
+                    <geom type="mesh" class="visual" pos="1.38778e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="1.38778e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_18 -->
+              <body name="spring_sim_spoke_18" pos="2.42861e-17 -0.02 -0.05" quat="2.22045e-16 1.96036e-17 1 -1.57079e-15">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_18 -->
+                <joint axis="0 0 1" name="spoke2_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                <inertial pos="3.21265e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.71541e-23 -2.58432e-25 -1.5889e-40"/>
+                <!-- Part spring_sim_spoke_18 -->
+                <geom type="mesh" class="visual" pos="3.1225e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="3.1225e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_18 -->
+                <body name="spring_sim_base_18" pos="6.93889e-18 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_18 to spring_sim_base_18 -->
+                  <joint axis="0 0 1" name="mag_slide5_FR" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="4.19811e-16 2.06754e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 5.28803e-38 -8.05951e-23 -6.76804e-24"/>
+                  <!-- Part spring_sim_base_18 -->
+                  <geom type="mesh" class="visual" pos="4.16334e-16 2.08167e-17 -0.054" quat="1 -0 -0 -0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="4.16334e-16 2.08167e-17 -0.054" quat="1 -0 -0 -0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_18 -->
+                  <body name="magnet_18" pos="4.16334e-16 3.1225e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_18 to magnet_18 -->
+                    <joint axis="0 0 1" name="mag_spoke5_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_18 -->
+                    <geom type="mesh" class="visual" pos="-5.20417e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="-5.20417e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_19 -->
+              <body name="spring_sim_spoke_19" pos="-0.02 0 -0.05" quat="1.1439e-16 0 0 -1">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_19 -->
+                <joint axis="0 0 1" name="spoke3_FR" type="hinge" range="-0.26179938779915296 0.26179938779914586"/>
+                <inertial pos="0.0095094 1.38672e-17 2.4451e-18" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 -1.07492e-21 -5.04044e-23 2.98122e-21"/>
+                <!-- Part spring_sim_spoke_19 -->
+                <geom type="mesh" class="visual" pos="0.08 2.498e-16 0" quat="2.30531e-16 0.707107 2.22045e-15 -0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0.08 2.498e-16 0" quat="2.30531e-16 0.707107 2.22045e-15 -0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_19 -->
+                <body name="spring_sim_base_19" pos="0.025 8.32667e-17 -2.77556e-17" quat="2.30531e-16 0.707107 2.22045e-15 -0.707107">
+                  <!-- Joint from spring_sim_spoke_19 to spring_sim_base_19 -->
+                  <joint axis="0 0 1" name="mag_slide7_FR" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="2.77556e-17 1.60261e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.21487e-37 3.54408e-38 2.62381e-23"/>
+                  <!-- Part spring_sim_base_19 -->
+                  <geom type="mesh" class="visual" pos="2.77556e-17 0 -0.054" quat="1 -0 0 -6.90253e-31" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="2.77556e-17 0 -0.054" quat="1 -0 0 -6.90253e-31" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_19 -->
+                  <body name="magnet_19" pos="5.55112e-17 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_19 to magnet_19 -->
+                    <joint axis="0 0 1" name="mag_spoke7_FR" type="hinge" range="-0.26179938779914586 0.26179938779915296"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_19 -->
+                    <geom type="mesh" class="visual" pos="3.05311e-16 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="3.05311e-16 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_20 -->
+              <body name="spring_sim_spoke_20" pos="0.02 0 -0.05" quat="9.68957e-16 0.707107 -0.707107 1.07099e-15">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_20 -->
+                <joint axis="0 0 1" name="spoke4_FR" type="hinge" range="-0.2617993877991432 0.2617993877991556"/>
+                <inertial pos="3.00875e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -3.333e-24 -2.58432e-25 6.15372e-38"/>
+                <!-- Part spring_sim_spoke_20 -->
+                <geom type="mesh" class="visual" pos="2.77556e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="2.77556e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_20 -->
+                <body name="spring_sim_base_20" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_20 to spring_sim_base_20 -->
+                  <joint axis="0 0 1" name="mag_slide3_FR" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="4.44089e-16 -2.72268e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 1.7358e-38 -1.09177e-37 -1.5471e-23"/>
+                  <!-- Part spring_sim_base_20 -->
+                  <geom type="mesh" class="visual" pos="4.44089e-16 -2.77556e-17 -0.054" quat="1 0 2.22045e-16 -3.9443e-31" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="4.44089e-16 -2.77556e-17 -0.054" quat="1 0 2.22045e-16 -3.9443e-31" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_20 -->
+                  <body name="magnet_20" pos="4.16334e-16 -2.77556e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_20 to magnet_20 -->
+                    <joint axis="0 0 1" name="mag_spoke3_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_20 -->
+                    <geom type="mesh" class="visual" pos="2.77556e-17 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="2.77556e-17 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_21 -->
+              <body name="spring_sim_spoke_21" pos="0.0141421 -0.0141421 -0.05" quat="0.92388 -0 0 -0.382683">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_21 -->
+                <joint axis="0 0 1" name="spoke5_FR" type="hinge" range="-0.26179938779914674 0.2617993877991521"/>
+                <inertial pos="0.0095094 4.60873e-17 2.99701e-17" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 1.17243e-21 7.89807e-22 -2.06891e-21"/>
+                <!-- Part spring_sim_spoke_21 -->
+                <geom type="mesh" class="visual" pos="0.08 -1.38778e-16 3.33067e-16" quat="2.93115e-16 -0.707107 1.77636e-15 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0.08 -1.38778e-16 3.33067e-16" quat="2.93115e-16 -0.707107 1.77636e-15 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_21 -->
+                <body name="spring_sim_base_21" pos="0.025 0 1.11022e-16" quat="2.93115e-16 -0.707107 1.77636e-15 0.707107">
+                  <!-- Joint from spring_sim_spoke_21 to spring_sim_base_21 -->
+                  <joint axis="0 0 1" name="mag_slide4_FR" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="2.77556e-17 -8.8007e-19 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 5.05796e-37 -1.25925e-36 -1.81809e-37"/>
+                  <!-- Part spring_sim_base_21 -->
+                  <geom type="mesh" class="visual" pos="2.77556e-17 0 -0.054" quat="1 -0 1.38778e-17 -1.38778e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="2.77556e-17 0 -0.054" quat="1 -0 1.38778e-17 -1.38778e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_21 -->
+                  <body name="magnet_21" pos="2.77556e-17 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_21 to magnet_21 -->
+                    <joint axis="0 0 1" name="mag_spoke4_FR" type="hinge" range="-0.26179938779914674 0.2617993877991521"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_21 -->
+                    <geom type="mesh" class="visual" pos="-2.22045e-16 0.015 -1.11022e-16" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="-2.22045e-16 0.015 -1.11022e-16" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_22 -->
+              <body name="spring_sim_spoke_22" pos="0.0141421 0.0141421 -0.05" quat="1.36356e-15 0.92388 -0.382683 5.43375e-16">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_22 -->
+                <joint axis="0 0 1" name="spoke6_FR" type="hinge" range="-0.26179938779914497 0.26179938779915385"/>
+                <inertial pos="-6.75517e-19 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -9.82223e-38 -2.58432e-25 -4.77694e-39"/>
+                <!-- Part spring_sim_spoke_22 -->
+                <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_22 -->
+                <body name="spring_sim_base_22" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_22 to spring_sim_base_22 -->
+                  <joint axis="0 0 1" name="mag_slide2_FR" type="slide" range="-8.673617379884035e-19 0.009"/>
+                  <inertial pos="1.38425e-16 -3.4135e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.05677e-22 -9.93405e-24 -1.55061e-22"/>
+                  <!-- Part spring_sim_base_22 -->
+                  <geom type="mesh" class="visual" pos="1.38778e-16 -2.77556e-17 -0.054" quat="1 1.38778e-17 -5.23684e-17 -1.80916e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="1.38778e-16 -2.77556e-17 -0.054" quat="1 1.38778e-17 -5.23684e-17 -1.80916e-15" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_22 -->
+                  <body name="magnet_22" pos="1.11022e-16 -2.77556e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_22 to magnet_22 -->
+                    <joint axis="0 0 1" name="mag_spoke2_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_22 -->
+                    <geom type="mesh" class="visual" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_23 -->
+              <body name="spring_sim_spoke_23" pos="-0.0141421 0.0141421 -0.05" quat="1.36497e-15 0.92388 0.382683 -5.39954e-16">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_23 -->
+                <joint axis="0 0 1" name="spoke7_FR" type="hinge" range="-0.26179938779914497 0.26179938779915385"/>
+                <inertial pos="-6.75517e-19 -0.0095094 -2.88372e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 0 -2.58432e-25 0"/>
+                <!-- Part spring_sim_spoke_23 -->
+                <geom type="mesh" class="visual" pos="0 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_23 -->
+                <body name="spring_sim_base_23" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_23 to spring_sim_base_23 -->
+                  <joint axis="0 0 1" name="mag_slide8_FR" type="slide" range="-8.673617379884035e-19 0.009"/>
+                  <inertial pos="4.16334e-16 -1.47579e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.59337e-36 1.19126e-36 -2.23501e-66"/>
+                  <!-- Part spring_sim_base_23 -->
+                  <geom type="mesh" class="visual" pos="4.16334e-16 -1.38778e-17 -0.054" quat="1 -0 -0 0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="4.16334e-16 -1.38778e-17 -0.054" quat="1 -0 -0 0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_23 -->
+                  <body name="magnet_23" pos="4.16334e-16 -2.77556e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_23 to magnet_23 -->
+                    <joint axis="0 0 1" name="mag_spoke8_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_23 -->
+                    <geom type="mesh" class="visual" pos="1.38778e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="1.38778e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_24 -->
+              <body name="spring_sim_spoke_24" pos="-0.0141421 -0.0141421 -0.05" quat="6.72357e-16 0.382683 0.92388 -1.28799e-15">
+                <!-- Joint from mag_wheel_base_3 to spring_sim_spoke_24 -->
+                <joint axis="0 0 1" name="spoke8_FR" type="hinge" range="-0.26179938779914497 0.26179938779915385"/>
+                <inertial pos="-2.84311e-17 -0.0095094 -2.88372e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 1.2155e-54 -2.58432e-25 2.45083e-38"/>
+                <!-- Part spring_sim_spoke_24 -->
+                <geom type="mesh" class="visual" pos="-2.77556e-17 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="-2.77556e-17 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_24 -->
+                <body name="spring_sim_base_24" pos="-2.77556e-17 -0.025 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_24 to spring_sim_base_24 -->
+                  <joint axis="0 0 1" name="mag_slide6_FR" type="slide" range="-8.673617379884035e-19 0.009"/>
+                  <inertial pos="3.86367e-16 -8.8007e-19 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 5.75192e-38 5.12447e-23 1.04946e-54"/>
+                  <!-- Part spring_sim_base_24 -->
+                  <geom type="mesh" class="visual" pos="3.88578e-16 0 -0.054" quat="1 -0 -0 -0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="3.88578e-16 0 -0.054" quat="1 -0 -0 -0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_24 -->
+                  <body name="magnet_24" pos="4.16334e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_24 to magnet_24 -->
+                    <joint axis="0 0 1" name="mag_spoke6_FR" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_24 -->
+                    <geom type="mesh" class="visual" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="0 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <!-- Link shoulder_4 -->
+      <body name="shoulder_4" pos="0.055 0.05 0.025" quat="4.58924e-17 0.707107 -3.33067e-16 -0.707107">
+        <!-- Joint from body to shoulder_4 -->
+        <joint axis="0 0 1" name="abd_FL" type="hinge" range="0.0 0.0"/>
+        <inertial pos="1.43613e-18 -0.0130773 -0.025" mass="0.05" fullinertia="2.97856e-05 1.84466e-05 2.899e-05 2.81372e-37 -1.39956e-53 -8.26569e-39"/>
+        <!-- Part shoulder_4 -->
+        <geom type="mesh" class="visual" pos="0 0 -0.05" quat="1 -0 -0 -2.43345e-18" mesh="shoulder" material="shoulder_material"/>
+        <geom type="mesh" class="collision" pos="0 0 -0.05" quat="1 -0 -0 -2.43345e-18" mesh="shoulder" material="shoulder_material"/>
+        <!-- Link leg_short_4 -->
+        <body name="leg_short_4" pos="-2.08167e-17 -0.05 -0.025" quat="0.653281 -0.653281 -0.270598 -0.270598">
+          <!-- Joint from shoulder_4 to leg_short_4 -->
+          <joint axis="0 0 1" name="sho_FL" type="hinge" range="0.0 0.0"/>
+          <inertial pos="0.05 1.92369e-18 -0.0045" mass="0.05" fullinertia="1.97416e-05 7.89822e-05 7.76154e-05 -1.0017e-21 -1.74076e-05 1.76627e-22"/>
+          <!-- Part leg_short_4 -->
+          <geom type="mesh" class="visual" pos="0.05 0 -0.0295" quat="1 -0 6.5916e-17 1.11022e-16" mesh="leg_short" material="leg_short_material"/>
+          <geom type="mesh" class="collision" pos="0.05 0 -0.0295" quat="1 -0 6.5916e-17 1.11022e-16" mesh="leg_short" material="leg_short_material"/>
+          <!-- Link leg_long_4 -->
+          <body name="leg_long_4" pos="0.1 0 -0.009" quat="0.707107 -0 -1.11022e-16 0.707107">
+            <!-- Joint from leg_short_4 to leg_long_4 -->
+            <joint axis="0 0 1" name="elb_FL" type="hinge" range="0.0 0.0"/>
+            <inertial pos="0.074957 -7.9176e-06 -0.00448601" mass="0.075" fullinertia="3.02339e-05 0.000185791 0.000184518 -1.89964e-08 -2.59147e-05 7.26599e-09"/>
+            <!-- Part leg_long_4 -->
+            <geom type="mesh" class="visual" pos="0.075 0 -0.0295" quat="1 -0 5.05044e-17 -3.64808e-31" mesh="leg_long" material="leg_long_material"/>
+            <geom type="mesh" class="collision" pos="0.075 0 -0.0295" quat="1 -0 5.05044e-17 -3.64808e-31" mesh="leg_long" material="leg_long_material"/>
+            <!-- Link mag_wheel_base_4 -->
+            <body name="mag_wheel_base_4" pos="0.15 3.46945e-18 -0.009" quat="0.707107 4.10811e-15 -3.9968e-15 -0.707107">
+              <!-- Joint from leg_long_4 to mag_wheel_base_4 -->
+              <joint axis="0 0 1" name="whl_FL" type="hinge"/>
+              <inertial pos="-3.30058e-17 0 -0.025" mass="0.15" fullinertia="4.625e-05 4.625e-05 3e-05 -9.38555e-22 7.8141e-35 1.05925e-34"/>
+              <!-- Part mag_wheel_base_4 -->
+              <geom type="mesh" class="visual" pos="-3.46945e-17 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+              <geom type="mesh" class="collision" pos="-3.46945e-17 0.1 -0.025" quat="0.5 0.5 0.5 -0.5" mesh="mag_wheel_base" material="mag_wheel_base_material"/>
+              <!-- Link spring_sim_spoke_25 -->
+              <body name="spring_sim_spoke_25" pos="-3.1225e-17 0.02 -0.05" quat="5.8054e-15 1 -4.7621e-18 -5.11406e-16">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_25 -->
+                <joint axis="0 0 1" name="spoke1_FL" type="hinge" range="-0.2617993877991485 0.2617993877991503"/>
+                <inertial pos="9.10533e-18 -0.0095094 -2.88372e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 1.29111e-23 -2.58432e-25 -5.51095e-38"/>
+                <!-- Part spring_sim_spoke_25 -->
+                <geom type="mesh" class="visual" pos="1.04083e-17 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="1.04083e-17 -0.08 -2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_25 -->
+                <body name="spring_sim_base_25" pos="-1.73472e-17 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_25 to spring_sim_base_25 -->
+                  <joint axis="0 0 1" name="mag_slide1_FL" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="2.77556e-16 -1.73656e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 1.52282e-36 -3.70909e-37 1.53122e-22"/>
+                  <!-- Part spring_sim_base_25 -->
+                  <geom type="mesh" class="visual" pos="2.77556e-16 -3.46945e-18 -0.054" quat="1 -0 -0 3.15544e-30" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="2.77556e-16 -3.46945e-18 -0.054" quat="1 -0 -0 3.15544e-30" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_25 -->
+                  <body name="magnet_25" pos="3.05311e-16 -3.46945e-18 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_25 to magnet_25 -->
+                    <joint axis="0 0 1" name="mag_spoke1_FL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_25 -->
+                    <geom type="mesh" class="visual" pos="-1.04083e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="-1.04083e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_26 -->
+              <body name="spring_sim_spoke_26" pos="-4.51028e-17 -0.02 -0.05" quat="1.11022e-16 4.92925e-17 -1 6.13832e-15">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_26 -->
+                <joint axis="0 0 1" name="spoke2_FL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                <inertial pos="-2.58793e-17 -0.0095094 2.66739e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 6.79273e-24 -2.58432e-25 -7.8096e-39"/>
+                <!-- Part spring_sim_spoke_26 -->
+                <geom type="mesh" class="visual" pos="-3.46945e-17 -0.08 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="-3.46945e-17 -0.08 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_26 -->
+                <body name="spring_sim_base_26" pos="-3.46945e-17 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_26 to spring_sim_base_26 -->
+                  <joint axis="0 0 1" name="mag_slide5_FL" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="1.38778e-16 1.60261e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 1.3673e-24 -1.78914e-36 -2.12675e-22"/>
+                  <!-- Part spring_sim_base_26 -->
+                  <geom type="mesh" class="visual" pos="1.38778e-16 0 -0.054" quat="1 -2.77556e-17 -0 -7.34139e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="1.38778e-16 0 -0.054" quat="1 -2.77556e-17 -0 -7.34139e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_26 -->
+                  <body name="magnet_26" pos="1.11022e-16 -6.93889e-18 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_26 to magnet_26 -->
+                    <joint axis="0 0 1" name="mag_spoke5_FL" type="hinge" range="-0.26179938779914763 0.2617993877991512"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_26 -->
+                    <geom type="mesh" class="visual" pos="3.1225e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="3.1225e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_27 -->
+              <body name="spring_sim_spoke_27" pos="-0.02 0 -0.05" quat="9.47635e-17 0 3.33067e-16 -1">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_27 -->
+                <joint axis="0 0 1" name="spoke3_FL" type="hinge" range="-0.26179938779914674 0.2617993877991521"/>
+                <inertial pos="0.0095094 -4.8798e-17 -2.30036e-17" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 1.28365e-21 2.43096e-21 1.07947e-20"/>
+                <!-- Part spring_sim_spoke_27 -->
+                <geom type="mesh" class="visual" pos="0.08 -2.498e-16 0" quat="5.89343e-15 -0.707107 -3.66374e-15 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0.08 -2.498e-16 0" quat="5.89343e-15 -0.707107 -3.66374e-15 0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_27 -->
+                <body name="spring_sim_base_27" pos="0.025 -1.11022e-16 -2.77556e-17" quat="5.89343e-15 -0.707107 -3.66374e-15 0.707107">
+                  <!-- Joint from spring_sim_spoke_27 to spring_sim_base_27 -->
+                  <joint axis="0 0 1" name="mag_slide7_FL" type="slide" range="-7.502679033599691e-17 0.008999999999999925"/>
+                  <inertial pos="-5.55112e-17 -2.61401e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -9.33435e-36 3.7386e-36 -2.8021e-23"/>
+                  <!-- Part spring_sim_base_27 -->
+                  <geom type="mesh" class="visual" pos="-5.55112e-17 -2.77556e-17 -0.054" quat="1 -0 -2.22045e-16 3.15544e-29" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="-5.55112e-17 -2.77556e-17 -0.054" quat="1 -0 -2.22045e-16 3.15544e-29" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_27 -->
+                  <body name="magnet_27" pos="-2.77556e-17 -2.77556e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_27 to magnet_27 -->
+                    <joint axis="0 0 1" name="mag_spoke7_FL" type="hinge" range="-0.2617993877991423 0.2617993877991565"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97087e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_27 -->
+                    <geom type="mesh" class="visual" pos="0 0.015 -5.55112e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="0 0.015 -5.55112e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_28 -->
+              <body name="spring_sim_spoke_28" pos="0.02 0 -0.05" quat="4.3677e-15 0.707107 -0.707107 3.7596e-15">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_28 -->
+                <joint axis="0 0 1" name="spoke4_FL" type="hinge" range="-0.2617993877991254 0.2617993877991734"/>
+                <inertial pos="2.40726e-17 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 3.333e-24 -2.58432e-25 -2.20585e-38"/>
+                <!-- Part spring_sim_spoke_28 -->
+                <geom type="mesh" class="visual" pos="2.77556e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="2.77556e-17 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_28 -->
+                <body name="spring_sim_base_28" pos="2.77556e-17 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_28 to spring_sim_base_28 -->
+                  <joint axis="0 0 1" name="mag_slide3_FL" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="1.11022e-16 1.82206e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -1.60302e-36 -1.17541e-36 3.15103e-22"/>
+                  <!-- Part spring_sim_base_28 -->
+                  <geom type="mesh" class="visual" pos="1.11022e-16 0 -0.054" quat="1 2.77556e-17 0 0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="1.11022e-16 0 -0.054" quat="1 2.77556e-17 0 0" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_28 -->
+                  <body name="magnet_28" pos="1.11022e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_28 to magnet_28 -->
+                    <joint axis="0 0 1" name="mag_spoke3_FL" type="hinge" range="-0.2617993877991485 0.2617993877991503"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_28 -->
+                    <geom type="mesh" class="visual" pos="-2.77556e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="-2.77556e-17 0.015 2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_29 -->
+              <body name="spring_sim_spoke_29" pos="0.0141421 -0.0141421 -0.05" quat="0.92388 -5.43131e-17 1.66533e-16 -0.382683">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_29 -->
+                <joint axis="0 0 1" name="spoke5_FL" type="hinge" range="-0.26179938779918316 0.26179938779911566"/>
+                <inertial pos="0.0095094 3.59327e-16 1.73147e-16" mass="0.005" fullinertia="1.83031e-07 4.98046e-07 4.93577e-07 -1.06735e-20 3.08456e-21 -8.61487e-21"/>
+                <!-- Part spring_sim_spoke_29 -->
+                <geom type="mesh" class="visual" pos="0.08 2.72005e-15 1.36002e-15" quat="1.49648e-14 0.707107 8.77076e-15 -0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0.08 2.72005e-15 1.36002e-15" quat="1.49648e-14 0.707107 8.77076e-15 -0.707107" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_29 -->
+                <body name="spring_sim_base_29" pos="0.025 8.60423e-16 4.16334e-16" quat="1.49648e-14 0.707107 8.77076e-15 -0.707107">
+                  <!-- Joint from spring_sim_spoke_29 to spring_sim_base_29 -->
+                  <joint axis="0 0 1" name="mag_slide4_FL" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="5.49932e-18 4.61925e-18 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 1.41184e-22 1.37227e-23 1.37227e-23"/>
+                  <!-- Part spring_sim_base_29 -->
+                  <geom type="mesh" class="visual" pos="0 0 -0.054" quat="1 -4.16334e-17 -0 1.38778e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="0 0 -0.054" quat="1 -4.16334e-17 -0 1.38778e-16" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_29 -->
+                  <body name="magnet_29" pos="0 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_29 to magnet_29 -->
+                    <joint axis="0 0 1" name="mag_spoke4_FL" type="hinge" range="-0.26179938779898687 0.26179938779931194"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_29 -->
+                    <geom type="mesh" class="visual" pos="2.41474e-15 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="2.41474e-15 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_30 -->
+              <body name="spring_sim_spoke_30" pos="0.0141421 0.0141421 -0.05" quat="5.63153e-15 0.92388 -0.382683 2.34015e-15">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_30 -->
+                <joint axis="0 0 1" name="spoke6_FL" type="hinge" range="-0.26179938779913253 0.2617993877991663"/>
+                <inertial pos="-6.75517e-19 -0.0095094 2.66739e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -9.02411e-39 -2.58432e-25 1.31828e-40"/>
+                <!-- Part spring_sim_spoke_30 -->
+                <geom type="mesh" class="visual" pos="0 -0.08 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0 -0.08 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_30 -->
+                <body name="spring_sim_base_30" pos="0 -0.025 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_30 to spring_sim_base_30 -->
+                  <joint axis="0 0 1" name="mag_slide2_FL" type="slide" range="0.0 0.009000000000000001"/>
+                  <inertial pos="-1.39836e-16 -2.83767e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 -3.2856e-22 -2.98021e-23 -4.45517e-22"/>
+                  <!-- Part spring_sim_base_30 -->
+                  <geom type="mesh" class="visual" pos="-1.38778e-16 0 -0.054" quat="1 9.71445e-17 -2.22045e-16 4.16334e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="-1.38778e-16 0 -0.054" quat="1 9.71445e-17 -2.22045e-16 4.16334e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_30 -->
+                  <body name="magnet_30" pos="-1.38778e-16 -1.38778e-17 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_30 to magnet_30 -->
+                    <joint axis="0 0 1" name="mag_spoke2_FL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_30 -->
+                    <geom type="mesh" class="visual" pos="1.38778e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="1.38778e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_31 -->
+              <body name="spring_sim_spoke_31" pos="-0.0141421 0.0141421 -0.05" quat="5.22258e-15 0.92388 0.382683 -2.70458e-15">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_31 -->
+                <joint axis="0 0 1" name="spoke7_FL" type="hinge" range="-0.26179938779913164 0.26179938779916717"/>
+                <inertial pos="-6.75517e-19 -0.0095094 2.66739e-17" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 -1.22778e-38 -2.58432e-25 2.34309e-38"/>
+                <!-- Part spring_sim_spoke_31 -->
+                <geom type="mesh" class="visual" pos="0 -0.08 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0 -0.08 2.77556e-17" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_31 -->
+                <body name="spring_sim_base_31" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_31 to spring_sim_base_31 -->
+                  <joint axis="0 0 1" name="mag_slide8_FL" type="slide" range="-2.862293735361732e-17 0.008999999999999972"/>
+                  <inertial pos="2.13601e-17 1.01186e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 5.43539e-23 -1.80148e-22 3.57236e-22"/>
+                  <!-- Part spring_sim_base_31 -->
+                  <geom type="mesh" class="visual" pos="2.77556e-17 0 -0.054" quat="1 1.39776e-17 2.77556e-17 2.77556e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="2.77556e-17 0 -0.054" quat="1 1.39776e-17 2.77556e-17 2.77556e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_31 -->
+                  <body name="magnet_31" pos="2.77556e-17 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_31 to magnet_31 -->
+                    <joint axis="0 0 1" name="mag_spoke8_FL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_31 -->
+                    <geom type="mesh" class="visual" pos="5.55112e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="5.55112e-17 0.015 0" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+              <!-- Link spring_sim_spoke_32 -->
+              <body name="spring_sim_spoke_32" pos="-0.0141421 -0.0141421 -0.05" quat="2.45778e-15 0.382683 0.92388 -5.53542e-15">
+                <!-- Joint from mag_wheel_base_4 to spring_sim_spoke_32 -->
+                <joint axis="0 0 1" name="spoke8_FL" type="hinge" range="-0.26179938779913253 0.2617993877991663"/>
+                <inertial pos="-6.75517e-19 -0.0095094 -1.08163e-18" mass="0.005" fullinertia="4.98046e-07 1.83031e-07 4.93577e-07 2.88522e-39 -2.58432e-25 -6.37659e-39"/>
+                <!-- Part spring_sim_spoke_32 -->
+                <geom type="mesh" class="visual" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <geom type="mesh" class="collision" pos="0 -0.08 0" quat="0.5 -0.5 -0.5 -0.5" mesh="spring_sim_spoke" material="spring_sim_spoke_material"/>
+                <!-- Link spring_sim_base_32 -->
+                <body name="spring_sim_base_32" pos="0 -0.025 0" quat="0.5 -0.5 -0.5 -0.5">
+                  <!-- Joint from spring_sim_spoke_32 to spring_sim_base_32 -->
+                  <joint axis="0 0 1" name="mag_slide6_FL" type="slide" range="-9.80118763926896e-17 0.008999999999999902"/>
+                  <inertial pos="1.95347e-16 -1.6332e-17 -0.0209777" mass="0.005" fullinertia="8.47779e-07 8.4871e-07 8.24021e-08 3.2856e-22 2.98021e-23 -4.50091e-22"/>
+                  <!-- Part spring_sim_base_32 -->
+                  <geom type="mesh" class="visual" pos="1.94289e-16 1.38778e-17 -0.054" quat="1 1.51664e-16 -1.11022e-16 -1.38778e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <geom type="mesh" class="collision" pos="1.94289e-16 1.38778e-17 -0.054" quat="1 1.51664e-16 -1.11022e-16 -1.38778e-17" mesh="spring_sim_base" material="spring_sim_base_material"/>
+                  <!-- Link magnet_32 -->
+                  <body name="magnet_32" pos="1.94289e-16 0 -0.039" quat="0.5 -0.5 -0.5 0.5">
+                    <!-- Joint from spring_sim_base_32 to magnet_32 -->
+                    <joint axis="0 0 1" name="mag_spoke6_FL" type="hinge" range="-0.2617993877991494 0.2617993877991494"/>
+                    <inertial pos="-1.597e-08 -3.70945e-09 7.4108e-08" mass="0.075" fullinertia="1.17205e-05 1.18506e-05 1.24528e-05 -3.97088e-14 -5.68676e-12 -3.61354e-12"/>
+                    <!-- Part magnet_32 -->
+                    <geom type="mesh" class="visual" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                    <geom type="mesh" class="collision" pos="0 0.015 -2.77556e-17" quat="0.5 0.5 0.5 -0.5" mesh="magnet" material="magnet_material"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <asset>
+    <mesh file="body.stl"/>
+    <mesh file="spring_sim_base.stl"/>
+    <mesh file="magnet.stl"/>
+    <mesh file="shoulder.stl"/>
+    <mesh file="leg_long.stl"/>
+    <mesh file="leg_short.stl"/>
+    <mesh file="mag_wheel_base.stl"/>
+    <mesh file="spring_sim_spoke.stl"/>
+    <material name="body_material" rgba="0.615686 0.811765 0.929412 1"/>
+    <material name="shoulder_material" rgba="0.615686 0.811765 0.929412 1"/>
+    <material name="leg_short_material" rgba="0.615686 0.811765 0.929412 1"/>
+    <material name="leg_long_material" rgba="0.615686 0.811765 0.929412 1"/>
+    <material name="mag_wheel_base_material" rgba="0.917647 0.917647 0.917647 1"/>
+    <material name="spring_sim_spoke_material" rgba="0.231373 0.380392 0.705882 1"/>
+    <material name="spring_sim_base_material" rgba="0.647059 0.647059 0.647059 1"/>
+    <material name="magnet_material" rgba="0.615686 0.811765 0.929412 1"/>
+  </asset>
+  <actuator>
+    <position class="robot_test" name="spine" joint="spine"/>
+    <position class="robot_test" name="abd_BL" joint="abd_BL" inheritrange="1"/>
+    <position class="robot_test" name="sho_BL" joint="sho_BL" inheritrange="1"/>
+    <position class="robot_test" name="elb_BL" joint="elb_BL" inheritrange="1"/>
+    <position class="robot_test" name="whl_BL" joint="whl_BL"/>
+    <!-- <position class="robot_test" name="spoke1_BL" joint="spoke1_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide1_BL" joint="mag_slide1_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke1_BL" joint="mag_spoke1_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke2_BL" joint="spoke2_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide5_BL" joint="mag_slide5_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke5_BL" joint="mag_spoke5_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke3_BL" joint="spoke3_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide7_BL" joint="mag_slide7_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke7_BL" joint="mag_spoke7_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke4_BL" joint="spoke4_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide3_BL" joint="mag_slide3_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke3_BL" joint="mag_spoke3_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke5_BL" joint="spoke5_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide4_BL" joint="mag_slide4_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke4_BL" joint="mag_spoke4_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke6_BL" joint="spoke6_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide2_BL" joint="mag_slide2_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke2_BL" joint="mag_spoke2_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke7_BL" joint="spoke7_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide8_BL" joint="mag_slide8_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke8_BL" joint="mag_spoke8_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke8_BL" joint="spoke8_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide6_BL" joint="mag_slide6_BL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke6_BL" joint="mag_spoke6_BL" inheritrange="1"/> -->
+    <position class="robot_test" name="abd_BR" joint="abd_BR" inheritrange="1"/>
+    <position class="robot_test" name="sho_BR" joint="sho_BR" inheritrange="1"/>
+    <position class="robot_test" name="elb_BR" joint="elb_BR" inheritrange="1"/>
+    <position class="robot_test" name="whl_BR" joint="whl_BR"/>
+    <!-- <position class="robot_test" name="spoke1_BR" joint="spoke1_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide1_BR" joint="mag_slide1_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke1_BR" joint="mag_spoke1_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke2_BR" joint="spoke2_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide5_BR" joint="mag_slide5_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke5_BR" joint="mag_spoke5_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke3_BR" joint="spoke3_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide7_BR" joint="mag_slide7_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke7_BR" joint="mag_spoke7_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke4_BR" joint="spoke4_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide3_BR" joint="mag_slide3_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke3_BR" joint="mag_spoke3_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke5_BR" joint="spoke5_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide4_BR" joint="mag_slide4_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke4_BR" joint="mag_spoke4_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke6_BR" joint="spoke6_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide2_BR" joint="mag_slide2_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke2_BR" joint="mag_spoke2_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke7_BR" joint="spoke7_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide8_BR" joint="mag_slide8_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke8_BR" joint="mag_spoke8_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke8_BR" joint="spoke8_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide6_BR" joint="mag_slide6_BR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke6_BR" joint="mag_spoke6_BR" inheritrange="1"/> -->
+    <position class="robot_test" name="abd_FR" joint="abd_FR" inheritrange="1"/>
+    <position class="robot_test" name="sho_FR" joint="sho_FR" inheritrange="1"/>
+    <position class="robot_test" name="elb_FR" joint="elb_FR" inheritrange="1"/>
+    <position class="robot_test" name="whl_FR" joint="whl_FR"/>
+    <!-- <position class="robot_test" name="spoke1_FR" joint="spoke1_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide1_FR" joint="mag_slide1_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke1_FR" joint="mag_spoke1_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke2_FR" joint="spoke2_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide5_FR" joint="mag_slide5_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke5_FR" joint="mag_spoke5_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke3_FR" joint="spoke3_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide7_FR" joint="mag_slide7_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke7_FR" joint="mag_spoke7_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke4_FR" joint="spoke4_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide3_FR" joint="mag_slide3_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke3_FR" joint="mag_spoke3_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke5_FR" joint="spoke5_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide4_FR" joint="mag_slide4_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke4_FR" joint="mag_spoke4_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke6_FR" joint="spoke6_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide2_FR" joint="mag_slide2_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke2_FR" joint="mag_spoke2_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke7_FR" joint="spoke7_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide8_FR" joint="mag_slide8_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke8_FR" joint="mag_spoke8_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke8_FR" joint="spoke8_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide6_FR" joint="mag_slide6_FR" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke6_FR" joint="mag_spoke6_FR" inheritrange="1"/> -->
+    <position class="robot_test" name="abd_FL" joint="abd_FL" inheritrange="1"/>
+    <position class="robot_test" name="sho_FL" joint="sho_FL" inheritrange="1"/>
+    <position class="robot_test" name="elb_FL" joint="elb_FL" inheritrange="1"/>
+    <position class="robot_test" name="whl_FL" joint="whl_FL"/>
+    <!-- <position class="robot_test" name="spoke1_FL" joint="spoke1_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide1_FL" joint="mag_slide1_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke1_FL" joint="mag_spoke1_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke2_FL" joint="spoke2_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide5_FL" joint="mag_slide5_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke5_FL" joint="mag_spoke5_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke3_FL" joint="spoke3_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide7_FL" joint="mag_slide7_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke7_FL" joint="mag_spoke7_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke4_FL" joint="spoke4_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide3_FL" joint="mag_slide3_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke3_FL" joint="mag_spoke3_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke5_FL" joint="spoke5_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide4_FL" joint="mag_slide4_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke4_FL" joint="mag_spoke4_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke6_FL" joint="spoke6_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide2_FL" joint="mag_slide2_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke2_FL" joint="mag_spoke2_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke7_FL" joint="spoke7_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide8_FL" joint="mag_slide8_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke8_FL" joint="mag_spoke8_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="spoke8_FL" joint="spoke8_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_slide6_FL" joint="mag_slide6_FL" inheritrange="1"/> -->
+    <!-- <position class="robot_test" name="mag_spoke6_FL" joint="mag_spoke6_FL" inheritrange="1"/> -->
+  </actuator>
+  <equality/>
+</mujoco>
