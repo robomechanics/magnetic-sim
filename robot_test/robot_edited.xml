@@ -600,7 +600,7 @@
         <material name="magnet_material" rgba="0.615686 0.811765 0.929412 1" />
     </asset>
     <actuator>
-        <position class="robot_test" name="spine" joint="spine" />
+        <position class="robot_test" name="spine" joint="spine" inheritrange="1"/>
         <position class="robot_test" name="abd_BL" joint="abd_BL" inheritrange="1" />
         <position class="robot_test" name="sho_BL" joint="sho_BL" inheritrange="1" />
         <position class="robot_test" name="elb_BL" joint="elb_BL" inheritrange="1" />
