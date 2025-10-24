@@ -3,8 +3,9 @@ import mujoco
 import mujoco.viewer
 
 # file_path = "robot_test/scene.xml"
-file_path = 'franka_emika_panda/scene.xml'
+# file_path = 'franka_emika_panda/scene.xml'
 # file_path = "flex_wheel/flex_scene.xml"
+file_path = "sally_mjcf/scene.xml"
 
 # Load your model
 model = mujoco.MjModel.from_xml_path(file_path)

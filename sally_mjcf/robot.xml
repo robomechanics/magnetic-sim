@@ -1,0 +1,170 @@
+
+<!-- Generated using onshape-to-robot -->
+<!-- Onshape https://cad.onshape.com/documents/9ec6f6fa5188c97806daaf60/w/4647d1c2d6e016d5df7a21e8/e/d607b3d6cd170bccde210c27 -->
+<mujoco model="sally_mjcf">
+  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+  <default>
+    <!-- <default class="sally_mjcf"> -->
+      <!-- <joint frictionloss="0.1" armature="0.005"/>
+      <position kp="50" dampratio="1"/>
+      <geom mass="10" type="mesh" contype="0" conaffinity="0" group="2"/> -->
+      <!-- </default> -->
+    <!-- </default> -->
+  </default>
+  <worldbody>
+    <!-- Link frame -->
+    <body name="frame" pos="0 0 0.5" quat="1 0 0 0">
+      <freejoint/>
+      <!-- Part frame -->
+      <geom mass="10" type="mesh"  pos="0.0180739 0.00440379 -0.0885384" quat="6.64008e-06 -7.24299e-06 1 -1.68313e-05" mesh="frame" material="frame_material"/>
+      <!-- Link frame_linkage -->
+      <body name="frame_linkage" pos="0.0180761 -0.139947 -0.101144" quat="0.707094 -0.707118 -0.00101616 -0.00100588">
+        <!-- Joint from frame to frame_linkage -->
+        <joint axis="0 0 1" name="right_hinge" type="hinge" stiffness="100"/>
+        
+        <!-- Part frame_linkage -->
+        
+        <geom mass="10" type="mesh"  pos="-3.46945e-18 0 0.0365" quat="0.707107 0.707107 0 1.5761e-19" mesh="frame_linkage" material="frame_linkage_material"/>
+        <!-- Part rocker -->
+        
+        <geom mass="10" type="mesh"  pos="-1.38778e-17 0.02276 -0.020625" quat="0.5 0.5 0.5 -0.5" mesh="rocker" material="rocker_material"/>
+        <!-- Link rocker_linkage -->
+        <body name="rocker_linkage" pos="-0.2166 0.018 -0.020625" quat="0.5 -0.5 0.5 0.5">
+          <!-- Joint from frame_linkage to rocker_linkage -->
+          <joint axis="0 0 1" name="BR_pivot" type="hinge"/>
+          
+          <!-- Part wheel_holder -->
+          
+          <geom mass="10" type="mesh"  pos="-0.00559823 0.000140783 0.05862" quat="3.31439e-16 0.698162 -0.71594 -6.15131e-17" mesh="wheel_holder" material="wheel_holder_material"/>
+          <!-- Part rocker_linkage -->
+          
+          <geom mass="10" type="mesh"  pos="-2.77556e-17 5.55112e-17 0.011" quat="9.09876e-17 -0.698162 0.71594 5.21112e-16" mesh="rocker_linkage" material="rocker_linkage_material"/>
+          <!-- Link wheel_linkage -->
+          <body name="wheel_linkage" pos="-0.0309912 0.000739345 0.04662" quat="0.184652 0.677713 -0.201753 -0.682571">
+            <!-- Joint from rocker_linkage to wheel_linkage -->
+            <joint axis="0 0 1" name="BR_wheel"/>
+            
+            <!-- Part wheel_linkage -->
+            
+            <geom mass="10" type="mesh"  pos="0 0 0" quat="0.707107 0.707107 0 -4.01208e-18" mesh="wheel_linkage" material="wheel_linkage_material"/>
+            <!-- Part wheel -->
+            
+            <geom mass="10" type="mesh"  pos="-2.77556e-17 1.38778e-17 -0.0165" quat="0.707107 0.707107 -3.33067e-16 -1.3708e-16" mesh="wheel" material="wheel_material"/>
+          </body>
+        </body>
+        <!-- Link rocker_linkage_2 -->
+        <body name="rocker_linkage_2" pos="0.2166 0.018 -0.020625" quat="0.5 -0.5 0.5 0.5">
+          <!-- Joint from frame_linkage to rocker_linkage_2 -->
+          <joint axis="0 0 1" name="FR_pivot" type="hinge"/>
+          
+          <!-- Part rocker_linkage_2 -->
+          
+          <geom mass="10" type="mesh"  pos="2.77556e-17 0 0.011" quat="2.86822e-16 -0.693382 0.72057 1.85896e-16" mesh="rocker_linkage" material="rocker_linkage_material"/>
+          <!-- Part wheel_holder_2 -->
+          
+          <geom mass="10" type="mesh"  pos="-0.00559586 0.000215279 0.05862" quat="2.86822e-16 -0.693382 0.72057 1.85896e-16" mesh="wheel_holder" material="wheel_holder_material"/>
+          <!-- Link wheel_linkage_2 -->
+          <body name="wheel_linkage_2" pos="-0.0309786 0.00115175 0.04662" quat="0.333211 0.610404 -0.356941 -0.623675">
+            <!-- Joint from rocker_linkage_2 to wheel_linkage_2 -->
+            <joint axis="0 0 1" name="FR_wheel"/>
+            
+            <!-- Part wheel_linkage_2 -->
+            
+            <geom mass="10" type="mesh"  pos="2.77556e-17 0 0" quat="0.707107 0.707107 0 1.2503e-17" mesh="wheel_linkage" material="wheel_linkage_material"/>
+            <!-- Part wheel_2 -->
+            
+            <geom mass="10" type="mesh"  pos="-1.38778e-17 0 -0.0165" quat="0.707107 0.707107 -3.55271e-15 -3.08059e-15" mesh="wheel" material="wheel_material"/>
+          </body>
+        </body>
+      </body>
+      <!-- Link frame_linkage_2 -->
+      <body name="frame_linkage_2" pos="0.0180719 0.148853 -0.101153" quat="0.498231 -0.498241 -0.50177 -0.501746">
+        <!-- Joint from frame to frame_linkage_2 -->
+        <joint axis="0 0 1" name="left_hinge" type="hinge" stiffness="100"/>
+        
+        <!-- Part frame_linkage_2 -->
+        
+        <geom mass="10" type="mesh"  pos="1.38778e-17 0 0.0365" quat="0.707107 0.707107 0 -4.24203e-19" mesh="frame_linkage" material="frame_linkage_material"/>
+        <!-- Part rocker_2 -->
+        
+        <geom mass="10" type="mesh"  pos="-0.02276 -1.04083e-17 0.020625" quat="0.707107 1.4179e-17 0.707107 -2.23058e-16" mesh="rocker" material="rocker_material"/>
+        <!-- Link rocker_linkage_3 -->
+        <body name="rocker_linkage_3" pos="-0.018 -0.2166 0.020625" quat="1.31812e-17 -0.707107 3.33067e-16 0.707107">
+          <!-- Joint from frame_linkage_2 to rocker_linkage_3 -->
+          <joint axis="0 0 1" name="BL_pivot" type="hinge"/>
+          
+          <!-- Part rocker_linkage_3 -->
+          
+          <geom mass="10" type="mesh"  pos="0 0 0.011" quat="1.07501e-18 -0.707107 0.707107 -2.09885e-17" mesh="rocker_linkage" material="rocker_linkage_material"/>
+          <!-- Part wheel_holder_3 -->
+          
+          <geom mass="10" type="mesh"  pos="0.0056 0 0.05862" quat="1.17978e-18 -0.707107 -0.707107 2.0055e-17" mesh="wheel_holder" material="wheel_holder_material"/>
+          <!-- Link wheel_linkage_3 -->
+          <body name="wheel_linkage_3" pos="0.031 4e-05 0.04662" quat="0.505916 -0.494014 0.505916 -0.494014">
+            <!-- Joint from rocker_linkage_3 to wheel_linkage_3 -->
+            <joint axis="0 0 1" name="BL_wheel"/>
+            
+            <!-- Part wheel_3 -->
+            
+            <geom mass="10" type="mesh"  pos="2.77556e-17 0 -0.0415" quat="0.707107 -0.707107 0 2.36022e-17" mesh="wheel" material="wheel_material"/>
+            <!-- Part wheel_linkage_3 -->
+            
+            <geom mass="10" type="mesh"  pos="2.77556e-17 -2.77556e-17 -0.052" quat="0.707107 -0.707107 0 -2.35867e-18" mesh="wheel_linkage" material="wheel_linkage_material"/>
+          </body>
+        </body>
+        <!-- Link rocker_linkage_4 -->
+        <body name="rocker_linkage_4" pos="-0.018 0.2166 0.020625" quat="1.31812e-17 -0.707107 3.33067e-16 0.707107">
+          <!-- Joint from frame_linkage_2 to rocker_linkage_4 -->
+          <joint axis="0 0 1" name="FL_pivot" type="hinge"/>
+          
+          <!-- Part rocker_linkage_4 -->
+          
+          <geom mass="10" type="mesh"  pos="-1.38778e-16 -2.77556e-17 0.011" quat="3.71573e-18 -0.703399 0.710795 -1.77453e-17" mesh="rocker_linkage" material="rocker_linkage_material"/>
+          <!-- Part wheel_holder_4 -->
+          
+          <geom mass="10" type="mesh"  pos="0.00559969 -5.85778e-05 0.05862" quat="1.10843e-18 -0.710795 -0.703399 1.52529e-17" mesh="wheel_holder" material="wheel_holder_material"/>
+          <!-- Link wheel_linkage_4 -->
+          <body name="wheel_linkage_4" pos="0.0309987 -0.000284272 0.04662" quat="0.491361 0.503325 -0.496653 -0.508493">
+            <!-- Joint from rocker_linkage_4 to wheel_linkage_4 -->
+            <joint axis="0 0 1" name="FL_wheel"/>
+            
+            <!-- Part wheel_linkage_4 -->
+            
+            <geom mass="10" type="mesh"  pos="0 0 0.052" quat="0.707107 0.707107 -0 -1.17884e-18" mesh="wheel_linkage" material="wheel_linkage_material"/>
+            <!-- Part wheel_4 -->
+            
+            <geom mass="10" type="mesh"  pos="2.77556e-17 0 0.0415" quat="0.707107 0.707107 -0 6.18097e-18" mesh="wheel" material="wheel_material"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <asset>
+    <mesh file="frame_linkage.stl"/>
+    <mesh file="rocker.stl"/>
+    <mesh file="frame.stl"/>
+    <mesh file="wheel.stl"/>
+    <mesh file="rocker_linkage.stl"/>
+    <mesh file="wheel_holder.stl"/>
+    <mesh file="wheel_linkage.stl"/>
+    <material name="frame_material" rgba="0.647059 0.647059 0.647059 1"/>
+    <material name="frame_linkage_material" rgba="0.231373 0.380392 0.705882 1"/>
+    <material name="rocker_material" rgba="0.890196 0.698039 0.639216 1"/>
+    <material name="wheel_holder_material" rgba="0.917647 0.917647 0.917647 1"/>
+    <material name="rocker_linkage_material" rgba="0.972549 0.529412 0.00392157 1"/>
+    <material name="wheel_linkage_material" rgba="0.768627 0.886275 0.952941 1"/>
+    <material name="wheel_material" rgba="0.498039 0.498039 0.498039 1"/>
+  </asset>
+  <actuator>
+    <!-- <position name="right_hinge" joint="right_hinge"/> -->
+    <position name="BR_pivot" joint="BR_pivot"/>
+    <position name="BR_wheel" joint="BR_wheel"/>
+    <position name="FR_pivot" joint="FR_pivot"/>
+    <position name="FR_wheel" joint="FR_wheel"/>
+    <!-- <position name="left_hinge" joint="left_hinge"/> -->
+    <position name="BL_pivot" joint="BL_pivot"/>
+    <position name="BL_wheel" joint="BL_wheel"/>
+    <position name="FL_pivot" joint="FL_pivot"/>
+    <position name="FL_wheel" joint="FL_wheel"/>
+  </actuator>
+</mujoco>
