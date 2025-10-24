@@ -1,0 +1,71 @@
+<mujoco model="magnet_floor_env">
+    <compiler angle="radian"/>
+
+    <option integrator="implicit" cone="elliptic" impratio="10" noslip_iterations="15"/>
+
+    <default class="main">
+        <geom condim="6"/>
+    </default>
+
+    <visual>
+        <global offwidth="1920" offheight="1080"/>
+    </visual>
+
+    <worldbody>
+
+        <!-- === Magnetic Floor (finite rectangular plate) === -->
+        <!-- Replace infinite plane with box; half-sizes = 0.25 m × 0.25 m × 0.02 m -->
+        <body name="floor" pos="0 0 0">
+            <geom name="magnetic_floor" type="box" size="0.25 0.25 0.02"
+                  rgba="1 1 1 1"
+                  friction="1 0.1 0.1"/>
+        </body>
+
+        <!-- === Magnet cylinder sitting on floor === -->
+        <!-- Axis along X (so it rolls along Y) -->
+        <!-- Half-length = 0.029, radius = 0.035 => center at z = 0.25*0.02*2 + 0.035 = 0.055 -->
+        <body name="magnet_box" pos="0 0 0.055" zaxis="1 0 0">
+            <inertial mass="0.5" pos="0 0 0"
+                      diaginertia="0.000148 0.000148 0.000225"/>
+            <freejoint/>
+
+            <!-- Main magnet cylinder -->
+            <geom name="mag_box" type="cylinder" size="0.035 0.029"
+                  rgba="0.8 0.2 0.2 0.8"
+                  friction="1 0.005 0.005"/>
+
+            <!-- === Magnetic contact points (2 mm inward offset) === -->
+            <!-- radius = 0.033, z = +0.025, 0, -0.025 -->
+
+            <!-- Top ring -->
+            <geom name="mag_pt0"  type="sphere" size="0.001" pos="0.033 0 0.025"/>
+            <geom name="mag_pt1"  type="sphere" size="0.001" pos="0.0233 0.0233 0.025"/>
+            <geom name="mag_pt2"  type="sphere" size="0.001" pos="0 0.033 0.025"/>
+            <geom name="mag_pt3"  type="sphere" size="0.001" pos="-0.0233 0.0233 0.025"/>
+            <geom name="mag_pt4"  type="sphere" size="0.001" pos="-0.033 0 0.025"/>
+            <geom name="mag_pt5"  type="sphere" size="0.001" pos="-0.0233 -0.0233 0.025"/>
+            <geom name="mag_pt6"  type="sphere" size="0.001" pos="0 -0.033 0.025"/>
+            <geom name="mag_pt7"  type="sphere" size="0.001" pos="0.0233 -0.0233 0.025"/>
+
+            <!-- Middle ring -->
+            <geom name="mag_pt8"  type="sphere" size="0.001" pos="0.033 0 0"/>
+            <geom name="mag_pt9"  type="sphere" size="0.001" pos="0.0233 0.0233 0"/>
+            <geom name="mag_pt10" type="sphere" size="0.001" pos="0 0.033 0"/>
+            <geom name="mag_pt11" type="sphere" size="0.001" pos="-0.0233 0.0233 0"/>
+            <geom name="mag_pt12" type="sphere" size="0.001" pos="-0.033 0 0"/>
+            <geom name="mag_pt13" type="sphere" size="0.001" pos="-0.0233 -0.0233 0"/>
+            <geom name="mag_pt14" type="sphere" size="0.001" pos="0 -0.033 0"/>
+            <geom name="mag_pt15" type="sphere" size="0.001" pos="0.0233 -0.0233 0"/>
+
+            <!-- Bottom ring -->
+            <geom name="mag_pt16" type="sphere" size="0.001" pos="0.033 0 -0.025"/>
+            <geom name="mag_pt17" type="sphere" size="0.001" pos="0.0233 0.0233 -0.025"/>
+            <geom name="mag_pt18" type="sphere" size="0.001" pos="0 0.033 -0.025"/>
+            <geom name="mag_pt19" type="sphere" size="0.001" pos="-0.0233 0.0233 -0.025"/>
+            <geom name="mag_pt20" type="sphere" size="0.001" pos="-0.033 0 -0.025"/>
+            <geom name="mag_pt21" type="sphere" size="0.001" pos="-0.0233 -0.0233 -0.025"/>
+            <geom name="mag_pt22" type="sphere" size="0.001" pos="0 -0.033 -0.025"/>
+            <geom name="mag_pt23" type="sphere" size="0.001" pos="0.0233 -0.0233 -0.025"/>
+        </body>
+    </worldbody>
+</mujoco>

@@ -17,16 +17,46 @@
             <geom name="metal_box" type="box" size="0.1 0.1 0.1"  rgba="1 1 1 0.5"/>
         </body>
 
-        <body name="magnet_box" pos="0 -0.2 0.2" zaxis="0 1 0">
-            <inertial mass ="0.5" pos="0 0 0" diaginertia="0.000148 0.000148 0.000225"/>
-            <freejoint/>
-            <geom name="mag_box" type="cylinder" size="0.035 0.029" rgba="0.8 0.2 0.2 0.5"/>
-            <geom name="mag_pt0" pos="0 0 0.025" type="sphere" size="0.001"/>
-            <geom name="mag_pt1" pos="0 -0.02 0.025" type="sphere" size="0.001"/>
-            <geom name="mag_pt2" pos="0 0.02 0.025" type="sphere" size="0.001"/>
-            <geom name="mag_pt3" pos="-0.02 0 0.025" type="sphere" size="0.001"/>
-            <geom name="mag_pt4" pos="0.02 0 0.025" type="sphere" size="0.001"/>
-        </body>
+        <body name="magnet_box" pos="0 -0.2 0.2" zaxis="1 0 0">
+    <inertial mass="0.5" pos="0 0 0" diaginertia="0.000148 0.000148 0.000225"/>
+    <freejoint/>
+    <!-- Main magnet cylinder -->
+    <geom name="mag_box" type="cylinder" size="0.035 0.029" rgba="0.8 0.2 0.2 0.5"/>
+
+        <!-- === Magnetic contact points (2 mm inward offset) === -->
+        <!-- radius = 0.033, z = +0.025, 0, -0.025 -->
+
+        <!-- Top ring -->
+        <geom name="mag_pt0"  type="sphere" size="0.001" pos="0.033 0 0.025"/>
+        <geom name="mag_pt1"  type="sphere" size="0.001" pos="0.0233 0.0233 0.025"/>
+        <geom name="mag_pt2"  type="sphere" size="0.001" pos="0 0.033 0.025"/>
+        <geom name="mag_pt3"  type="sphere" size="0.001" pos="-0.0233 0.0233 0.025"/>
+        <geom name="mag_pt4"  type="sphere" size="0.001" pos="-0.033 0 0.025"/>
+        <geom name="mag_pt5"  type="sphere" size="0.001" pos="-0.0233 -0.0233 0.025"/>
+        <geom name="mag_pt6"  type="sphere" size="0.001" pos="0 -0.033 0.025"/>
+        <geom name="mag_pt7"  type="sphere" size="0.001" pos="0.0233 -0.0233 0.025"/>
+
+        <!-- Middle ring -->
+        <geom name="mag_pt8"  type="sphere" size="0.001" pos="0.033 0 0"/>
+        <geom name="mag_pt9"  type="sphere" size="0.001" pos="0.0233 0.0233 0"/>
+        <geom name="mag_pt10" type="sphere" size="0.001" pos="0 0.033 0"/>
+        <geom name="mag_pt11" type="sphere" size="0.001" pos="-0.0233 0.0233 0"/>
+        <geom name="mag_pt12" type="sphere" size="0.001" pos="-0.033 0 0"/>
+        <geom name="mag_pt13" type="sphere" size="0.001" pos="-0.0233 -0.0233 0"/>
+        <geom name="mag_pt14" type="sphere" size="0.001" pos="0 -0.033 0"/>
+        <geom name="mag_pt15" type="sphere" size="0.001" pos="0.0233 -0.0233 0"/>
+
+        <!-- Bottom ring -->
+        <geom name="mag_pt16" type="sphere" size="0.001" pos="0.033 0 -0.025"/>
+        <geom name="mag_pt17" type="sphere" size="0.001" pos="0.0233 0.0233 -0.025"/>
+        <geom name="mag_pt18" type="sphere" size="0.001" pos="0 0.033 -0.025"/>
+        <geom name="mag_pt19" type="sphere" size="0.001" pos="-0.0233 0.0233 -0.025"/>
+        <geom name="mag_pt20" type="sphere" size="0.001" pos="-0.033 0 -0.025"/>
+        <geom name="mag_pt21" type="sphere" size="0.001" pos="-0.0233 -0.0233 -0.025"/>
+        <geom name="mag_pt22" type="sphere" size="0.001" pos="0 -0.033 -0.025"/>
+        <geom name="mag_pt23" type="sphere" size="0.001" pos="0.0233 -0.0233 -0.025"/>
+    </body>
+
 
     </worldbody>
 
