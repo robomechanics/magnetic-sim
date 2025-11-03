@@ -14,7 +14,7 @@
 
         <!-- === Vertical Magnetic Wall === -->
         <!-- Positioned vertically, normal along +X -->
-        <body name="wall" pos="0.175 0 0.175">
+        <body name="wall" pos="0.18 0 0.18">
             <geom name="magnetic_wall" type="box" size="0.02 0.25 0.25"/>
         </body>
 

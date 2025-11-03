@@ -120,7 +120,8 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
             mag_vec = mag_fromto[3:6] - mag_fromto[0:3]
             mag_vec /= np.linalg.norm(mag_vec)
 
-            proj_vec = np.dot(raw_vec, mag_vec) * mag_vec
+            #proj_vec = np.dot(raw_vec, mag_vec) * mag_vec
+            proj_vec = 1*mag_vec
             fromto = np.concatenate([mag_fromto[0:3], mag_fromto[0:3] + proj_vec])
             distance = raw_distance if np.dot(raw_vec, mag_vec) > 0 else 0
 
@@ -151,7 +152,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
                 tot_wrench += np.concatenate((force_vector, moment))
 
         data.xfrc_applied[mag_body_id] += tot_wrench
-
+        time.sleep(0.1)
         print(f"time={data.time:.3f}, mode={key_state['mode']}, "
               f"distance={distance:.5f} m, total_force={np.linalg.norm(tot_wrench[:3]):.3f} N")
 
