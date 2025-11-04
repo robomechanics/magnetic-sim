@@ -16,7 +16,7 @@ CONFIG = {
     # Magnetic parameters
     "Br": 1.48, # Tesla, 1 Tesla = 10000 Gauss
     "magnet_volume": np.pi * ((0.025/2)**2 - (0.016/2)**2) * 0.025,  # m^3
-    "max_total_force": 200.0 * 3,
+    "max_total_force": 200.0 * 1,
     "distance_min": 0.01,
     "distance_max": 0.05,
     "MU_0": 4 * np.pi * 1e-7,
@@ -113,7 +113,13 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
         for mag_id in mag_ids:
             raw_fromto = np.zeros(6, dtype=np.float64)
             raw_distance = mujoco.mj_geomDistance(model, data, mag_id, box_id, 50, raw_fromto)
-            raw_vec = raw_fromto[3:6] - raw_fromto[0:3]
+            raw_vec = raw_fromto[3:6] - raw_fromto[0:3]          # from magnet point → wall
+            distance = np.linalg.norm(raw_vec)
+
+            if distance < 1e-6:
+                continue  # skip degenerate cases
+
+            n_hat = raw_vec / distance   
 
             mag_fromto = np.zeros(6, dtype=np.float64)
             mujoco.mj_geomDistance(model, data, mag_id, mag_geom_id, 1, mag_fromto)
@@ -121,35 +127,53 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
             mag_vec /= np.linalg.norm(mag_vec)
 
             #proj_vec = np.dot(raw_vec, mag_vec) * mag_vec
-            proj_vec = 1*mag_vec
-            fromto = np.concatenate([mag_fromto[0:3], mag_fromto[0:3] + proj_vec])
-            distance = raw_distance if np.dot(raw_vec, mag_vec) > 0 else 0
+            arrow_length = min(distance, 0.05)  # short arrow for clarity
+            proj_vec = n_hat * arrow_length
+            fromto = np.concatenate([raw_fromto[0:3], raw_fromto[0:3] + proj_vec])
 
             if CONFIG["distance_min"] < distance < CONFIG["distance_max"]:
                 add_visual_arrow(viewer.user_scn, fromto[0:3], fromto[3:6],
                                  radius=CONFIG["arrow_radius"], rgba=CONFIG["arrow_color"])
 
-                fmag = calculate_magnetic_force(
-                    distance, CONFIG["Br"], CONFIG["magnet_volume"], CONFIG["MU_0"]
-                )
-                fmag = min(fmag, CONFIG["max_total_force"] / len(mag_ids))
+            # --- Magnetic force magnitude ---
+            fmag = calculate_magnetic_force(
+                distance, CONFIG["Br"], CONFIG["magnet_volume"], CONFIG["MU_0"]
+            )
+            fmag = min(fmag, CONFIG["max_total_force"] / len(mag_ids))
 
-                # Magnetization axis logic
-                mag_xmat = data.body(CONFIG["magnet_body_name"]).xmat.reshape(3, 3)
+            # --- Magnetization orientation scaling ---
+            mag_xmat = data.body(CONFIG["magnet_body_name"]).xmat.reshape(3, 3)
+            if key_state["mode"] == "face":
+                m_hat = n_hat
+            elif key_state["mode"] == "side-x":
+                m_hat = mag_xmat[0] / np.linalg.norm(mag_xmat[0])
+            elif key_state["mode"] == "side-y":
+                m_hat = mag_xmat[1] / np.linalg.norm(mag_xmat[1])
+            else:
+                m_hat = n_hat
 
-                if key_state["mode"] == "face":
-                    direction = fromto[3:6] - fromto[0:3]
-                    direction /= np.linalg.norm(direction)
-                    force_vector = fmag * direction
-                elif key_state["mode"] == "side-x":
-                    force_vector = fmag * mag_xmat[0]
-                elif key_state["mode"] == "side-y":
-                    force_vector = fmag * mag_xmat[1]
+            orientation_scale = (np.dot(m_hat, n_hat)) ** 2
+            fmag *= orientation_scale
 
-                mag_pt_pos = data.geom(mag_id).xpos
-                moment_arm = mag_pt_pos - obj_pos
-                moment = np.cross(moment_arm, force_vector)
-                tot_wrench += np.concatenate((force_vector, moment))
+            # --- Force direction (always defined now) ---
+            if key_state["mode"] == "face":
+                # normal pull toward wall
+                direction = n_hat
+            elif key_state["mode"] == "side-x":
+                direction = mag_xmat[0] / np.linalg.norm(mag_xmat[0])
+            elif key_state["mode"] == "side-y":
+                direction = mag_xmat[1] / np.linalg.norm(mag_xmat[1])
+            else:
+                direction = n_hat
+
+            force_vector = fmag * direction  # <-- now always defined
+
+            # --- Moment calculation ---
+            mag_pt_pos = data.geom(mag_id).xpos
+            moment_arm = mag_pt_pos - obj_pos
+            moment = np.cross(moment_arm, force_vector)
+            tot_wrench += np.concatenate((force_vector, moment))
+
 
         data.xfrc_applied[mag_body_id] += tot_wrench
         time.sleep(0.1)

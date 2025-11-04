@@ -14,23 +14,24 @@
 
         <!-- === Vertical Magnetic Wall === -->
         <!-- Positioned vertically, normal along +X -->
-        <body name="wall" pos="0.18 0 0.18">
+        <body name="wall" pos="0.205 0 0.205">
             <geom name="magnetic_wall" type="box" size="0.02 0.25 0.25"/>
         </body>
 
 
         <!-- === Magnet wheel adhering to wall === -->
         <!-- Axis along X, with ~2 mm air gap before contact -->
-        <body name="magnet_wheel" pos="0.125 0 0.15" zaxis="0 0 1">
+        <!-- Added 10° tilt around Z-axis -->
+        <body name="magnet_wheel" pos="0.125 0 0.15" euler="0 0 0.174533"> <!-- 10° = 0.174533 rad -->
             <inertial mass="0.33" pos="0 0 0"
-                    diaginertia="0.000069 0.000103 0.000069"/>
+                      diaginertia="0.000069 0.000103 0.000069"/>
 
             <freejoint/>
 
             <!-- Main magnet cylinder -->
-             <geom name="magnet_geom" type="cylinder" size="0.025 0.0125"
-                rgba="0.8 0.2 0.2 0.8"
-                friction="1 0.01 0.01"/>
+            <geom name="magnet_geom" type="cylinder" size="0.025 0.0125"
+                  rgba="0.8 0.2 0.2 0.8"
+                  friction="1 0.01 0.01"/>
 
             <!-- Magnetic contact points — front face touching wall -->
             <geom name="mag_pt0" type="sphere" size="0.001" pos="0.025  0.018  0.0125"/>

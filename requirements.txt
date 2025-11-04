@@ -1,0 +1,8 @@
+mujoco
+matplotlib
+numpy
+scipy
+pandas
+opencv-python
+pyyaml
+tqdm
