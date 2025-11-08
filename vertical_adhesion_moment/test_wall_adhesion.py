@@ -8,15 +8,15 @@ import matplotlib.pyplot as plt
 # === CONFIGURATION ==========================================================
 CONFIG = {
     "xml_file": "torque_wall_scene.xml",  # include the wall env
-    "timestep": 0.01,
+    "timestep": 0.001,
     "t_max": 100.0,
     "real_time_sync": True,
     "pause_key": " ",
 
     # Magnetic parameters
-    "Br": 1.48, # Tesla, 1 Tesla = 10000 Gauss
+    "Br": 1.48/1.5, # Tesla, 1 Tesla = 10000 Gauss
     "magnet_volume": np.pi * ((0.025/2)**2 - (0.016/2)**2) * 0.025,  # m^3
-    "max_total_force": 200.0 * 1,
+    "max_total_force": 200.0 * 3,
     "distance_min": 0.01,
     "distance_max": 0.05,
     "MU_0": 4 * np.pi * 1e-7,
@@ -69,7 +69,7 @@ def add_visual_arrow(scene, from_point, to_point, radius=0.005, rgba=(0, 0, 1, 1
     scene.ngeom += 1
 
 # Keyboard control
-key_state = {"paused": False, "mode": "side-y"}
+key_state = {"paused": True, "mode": "side-y"}
 def key_callback(keycode):
     c = chr(keycode)
     if c == CONFIG["pause_key"]:
@@ -92,10 +92,18 @@ model.opt.o_solimp[:] = [0.99, 0.99, 0.001, 0.5, 2]
 model.opt.o_friction[:] = [1, 1, 0.001, 0.0005, 0.0005]
 
 # IDs
-mag_ids = [
-    mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"{CONFIG['magnet_pt_prefix']}{i}")
-    for i in range(CONFIG["num_mag_pts"])
-]
+# 3 layers: front (f), middle (m), back (b)
+layers = ["f", "m", "b"]
+mag_ids = []
+for layer in layers:
+    for i in range(8):
+        name = f"{CONFIG['magnet_pt_prefix']}{i}_{layer}"
+        geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+        if geom_id == -1:
+            print(f"[WARN] geom {name} not found!")
+        else:
+            mag_ids.append(geom_id)
+
 box_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, CONFIG["metal_geom_name"])
 mag_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, CONFIG["magnet_geom_name"])
 mag_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, CONFIG["magnet_body_name"])
@@ -105,7 +113,9 @@ start_time = time.time()
 print(f"[INFO] Starting magnetic adhesion simulation in {CONFIG['xml_file']}")
 
 with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
+
     while viewer.is_running():
+
         viewer.user_scn.ngeom = 0
         obj_pos = data.body(CONFIG["magnet_body_name"]).xpos
         tot_wrench = np.zeros(6, dtype=np.float64)
@@ -176,7 +186,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
 
 
         data.xfrc_applied[mag_body_id] += tot_wrench
-        time.sleep(0.1)
+
         print(f"time={data.time:.3f}, mode={key_state['mode']}, "
               f"distance={distance:.5f} m, total_force={np.linalg.norm(tot_wrench[:3]):.3f} N")
 

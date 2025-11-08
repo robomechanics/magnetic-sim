@@ -33,15 +33,35 @@
                   rgba="0.8 0.2 0.2 0.8"
                   friction="1 0.01 0.01"/>
 
-            <!-- Magnetic contact points — front face touching wall -->
-            <geom name="mag_pt0" type="sphere" size="0.001" pos="0.025  0.018  0.0125"/>
-            <geom name="mag_pt1" type="sphere" size="0.001" pos="0.025 -0.018  0.0125"/>
-            <geom name="mag_pt2" type="sphere" size="0.001" pos="0.025  0.018 -0.0125"/>
-            <geom name="mag_pt3" type="sphere" size="0.001" pos="0.025 -0.018 -0.0125"/>
-            <geom name="mag_pt4" type="sphere" size="0.001" pos="0.025  0.000  0.000"/>
-            <geom name="mag_pt5" type="sphere" size="0.001" pos="0.025  0.025  0.000"/>
-            <geom name="mag_pt6" type="sphere" size="0.001" pos="0.025 -0.025  0.000"/>
-            <geom name="mag_pt7" type="sphere" size="0.001" pos="0.025  0.000  0.0125"/>
+            <!-- Magnetic contact points — 3 rings of 8, all embedded (0.025-pos's first value) mm inside cylinder face -->
+            <geom name="mag_pt0_f" type="sphere" size="0.001" pos="0  0  0"/>
+            <!-- <geom name="mag_pt1_f" type="sphere" size="0.001" pos="0.010 -0.018  0.0125"/>
+            <geom name="mag_pt2_f" type="sphere" size="0.001" pos="0.010  0.018 -0.0125"/>
+            <geom name="mag_pt3_f" type="sphere" size="0.001" pos="0.010 -0.018 -0.0125"/>
+            <geom name="mag_pt4_f" type="sphere" size="0.001" pos="0.010  0.000  0.000"/>
+            <geom name="mag_pt5_f" type="sphere" size="0.001" pos="0.010  0.025  0.000"/>
+            <geom name="mag_pt6_f" type="sphere" size="0.001" pos="0.010 -0.025  0.000"/>
+            <geom name="mag_pt7_f" type="sphere" size="0.001" pos="0.010  0.000  0.0125"/>
+
+            <geom name="mag_pt0_m" type="sphere" size="0.001" pos="0.010  0.018  0.0125"/>
+            <geom name="mag_pt1_m" type="sphere" size="0.001" pos="0.010 -0.018  0.0125"/>
+            <geom name="mag_pt2_m" type="sphere" size="0.001" pos="0.010  0.018 -0.0125"/>
+            <geom name="mag_pt3_m" type="sphere" size="0.001" pos="0.010 -0.018 -0.0125"/>
+            <geom name="mag_pt4_m" type="sphere" size="0.001" pos="0.010  0.000  0.000"/>
+            <geom name="mag_pt5_m" type="sphere" size="0.001" pos="0.010  0.025  0.000"/>
+            <geom name="mag_pt6_m" type="sphere" size="0.001" pos="0.010 -0.025  0.000"/>
+            <geom name="mag_pt7_m" type="sphere" size="0.001" pos="0.010  0.000  0.0125"/>
+
+            <geom name="mag_pt0_b" type="sphere" size="0.001" pos="0.010  0.018  0.0125"/>
+            <geom name="mag_pt1_b" type="sphere" size="0.001" pos="0.010 -0.018  0.0125"/>
+            <geom name="mag_pt2_b" type="sphere" size="0.001" pos="0.010  0.018 -0.0125"/>
+            <geom name="mag_pt3_b" type="sphere" size="0.001" pos="0.010 -0.018 -0.0125"/>
+            <geom name="mag_pt4_b" type="sphere" size="0.001" pos="0.010  0.000  0.000"/>
+            <geom name="mag_pt5_b" type="sphere" size="0.001" pos="0.010  0.025  0.000"/>
+            <geom name="mag_pt6_b" type="sphere" size="0.001" pos="0.010 -0.025  0.000"/>
+            <geom name="mag_pt7_b" type="sphere" size="0.001" pos="0.010  0.000  0.0125"/> -->
+
+
         </body>
 
     </worldbody>
