@@ -1,0 +1,25 @@
+<mujoco model="sally_scene">
+    <compiler angle="radian" meshdir="assets" autolimits="true"/>
+    <option gravity="0 0 -9.81" integrator="implicit"/>
+
+    <visual>
+    <headlight diffuse="0.8 0.8 0.8" ambient="0.4 0.4 0.4" specular="0.2 0.2 0.2"/>
+    <map fogstart="1.0" fogend="3.0" znear="0.01" zfar="10.0" force="0.1"/>
+    <rgba haze="0.75 0.85 1.0 1"/>   <!-- blue haze -->
+    </visual>
+
+    <asset>
+    <!-- Bright gradient sky background -->
+    <texture name="skybox" type="skybox" builtin="gradient"
+            rgb1="0.6 0.8 1.0" rgb2="1.0 1.0 1.0"
+            width="512" height="3072"/>
+    </asset>
+
+    <!-- For consistent viewer centering -->
+    <statistic center="0 0 0.3" extent="1.0"/>
+
+    <!-- Include the robot + wall -->
+    <include file="robot_sally.xml" mujoco_include="true"/>
+
+
+</mujoco>
