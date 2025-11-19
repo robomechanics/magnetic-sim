@@ -72,6 +72,7 @@ ET.SubElement(magnet_body, "geom",
               rgba="0.8 0.2 0.2 0.8",
               friction="1 0.01 0.01")
 
+
 # ===========================
 # Magnetic contact points
 # ===========================

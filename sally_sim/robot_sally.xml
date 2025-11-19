@@ -315,13 +315,13 @@
   </asset>
 
   <actuator>
-    <position name="BR_pivot" joint="BR_pivot"/>
-    <position name="BR_wheel" joint="BR_wheel"/>
-    <position name="FR_pivot" joint="FR_pivot"/>
-    <position name="FR_wheel" joint="FR_wheel"/>
-    <position name="BL_pivot" joint="BL_pivot"/>
-    <position name="BL_wheel" joint="BL_wheel"/>
-    <position name="FL_pivot" joint="FL_pivot"/>
-    <position name="FL_wheel" joint="FL_wheel"/>
+    <position name="BR_pivot" joint="BR_pivot" kp="20" kv="1"/>
+    <position name="BR_wheel" joint="BR_wheel" kp="20" kv="1"/>
+    <position name="FR_pivot" joint="FR_pivot" kp="20" kv="1"/>
+    <position name="FR_wheel" joint="FR_wheel" kp="20" kv="1"/>
+    <position name="BL_pivot" joint="BL_pivot" kp="20" kv="1"/>
+    <position name="BL_wheel" joint="BL_wheel" kp="20" kv="1"/>
+    <position name="FL_pivot" joint="FL_pivot" kp="20" kv="1"/>
+    <position name="FL_wheel" joint="FL_wheel" kp="20" kv="1"/>
   </actuator>
 </mujoco>

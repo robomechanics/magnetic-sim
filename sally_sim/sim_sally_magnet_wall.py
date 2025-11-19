@@ -17,8 +17,8 @@ CONFIG = {
     "Br": 1.48 / 1.5,  # Tesla
     "magnet_volume": np.pi * ((0.025 / 2) ** 2 - (0.016 / 2) ** 2) * 0.025,
     "max_total_force": 200.0 * 4,   # 4 wheels
-    "distance_min": 0.001,
-    "distance_max": 0.05,
+    "distance_min": 0.0001,
+    "distance_max": 0.01,
     "MU_0": 4 * np.pi * 1e-7,
 
     # Visual arrows
