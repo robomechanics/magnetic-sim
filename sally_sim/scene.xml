@@ -19,7 +19,7 @@
     <statistic center="0 0 0.3" extent="1.0"/>
 
     <!-- Include the robot + wall -->
-    <include file="robot_sally.xml" mujoco_include="true"/>
+    <include file="robot_sally_patched.xml" mujoco_include="true"/>
 
 
 </mujoco>

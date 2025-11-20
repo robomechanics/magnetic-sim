@@ -1,8 +1,9 @@
 <mujoco model="sally_mjcf">
   <compiler angle="radian" meshdir="assets" autolimits="true"/>
   <option integrator="implicit" gravity="0 0 -9.81" cone="elliptic" impratio="10" noslip_iterations="15"/>
+  <include file="robot_sally_patched.xml"/>
   <default>
-    <geom condim="3" contype="1" conaffinity="1"/>
+    <geom condim="6" contype="1" conaffinity="1"/>
   </default>
 
 <worldbody>
@@ -315,13 +316,14 @@
   </asset>
 
   <actuator>
-    <position name="BR_pivot" joint="BR_pivot" kp="20" kv="1"/>
-    <position name="BR_wheel" joint="BR_wheel" kp="20" kv="1"/>
-    <position name="FR_pivot" joint="FR_pivot" kp="20" kv="1"/>
-    <position name="FR_wheel" joint="FR_wheel" kp="20" kv="1"/>
-    <position name="BL_pivot" joint="BL_pivot" kp="20" kv="1"/>
-    <position name="BL_wheel" joint="BL_wheel" kp="20" kv="1"/>
-    <position name="FL_pivot" joint="FL_pivot" kp="20" kv="1"/>
-    <position name="FL_wheel" joint="FL_wheel" kp="20" kv="1"/>
+    <position name="BR_pivot" joint="BR_pivot" kp="20" kv="10"/>
+    <position name="FR_pivot" joint="FR_pivot" kp="20" kv="10"/>
+    <position name="BL_pivot" joint="BL_pivot" kp="20" kv="10"/>
+    <position name="FL_pivot" joint="FL_pivot" kp="20" kv="10"/>
+    <motor name="BR_wheel_motor" joint="BR_wheel" gear="1.0"/>
+    <motor name="FR_wheel_motor" joint="FR_wheel" gear="1.0"/>
+    <motor name="BL_wheel_motor" joint="BL_wheel" gear="1.0"/>
+    <motor name="FL_wheel_motor" joint="FL_wheel" gear="1.0"/>
+
   </actuator>
 </mujoco>
