@@ -31,7 +31,7 @@ CONFIG = {
 }
 
 # Motor torque magnitude
-TORQUE = 3.0 # N·m
+TORQUE = 10.0 # N·m
 
 
 # =============================================================================
@@ -191,24 +191,26 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
         # -----------------------------
         # Step simulation
         # -----------------------------
+        # Step simulation ONLY when running
         if not key_state["paused"]:
             mujoco.mj_step(model, data)
             sim_time += timestep
 
+            # Log only when running (no scrolling when paused)
+            print(
+                f"t={sim_time:.3f}s | Total |F|={np.linalg.norm(total_force):.2f}N | "
+                f"FL={wheel_forces.get('FL_cyl',0):.1f}  "
+                f"FR={wheel_forces.get('FR_cyl',0):.1f}  "
+                f"BL={wheel_forces.get('BL_cyl',0):.1f}  "
+                f"BR={wheel_forces.get('BR_cyl',0):.1f}"
+            )
+
         viewer.sync()
 
-        # Optional real-time pacing
-        if CONFIG["real_time_sync"]:
+        # Optional real-time pacing only when running
+        if CONFIG["real_time_sync"] and not key_state["paused"]:
             time.sleep(timestep)
 
-        # Log once per frame
-        print(
-            f"t={sim_time:.3f}s | Total |F|={np.linalg.norm(total_force):.2f}N | "
-            f"FL={wheel_forces.get('FL_cyl',0):.1f}  "
-            f"FR={wheel_forces.get('FR_cyl',0):.1f}  "
-            f"BL={wheel_forces.get('BL_cyl',0):.1f}  "
-            f"BR={wheel_forces.get('BR_cyl',0):.1f}"
-        )
 
 
         # End simulation

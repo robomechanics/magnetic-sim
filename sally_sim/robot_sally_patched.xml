@@ -21,10 +21,10 @@
           <joint axis="0 0 1" name="BR_pivot" type="hinge" />
           <geom mass="0.15" type="mesh" pos="-0.00559823 0.000140783 0.05862" quat="3.31439e-16 0.698162 -0.71594 -6.15131e-17" mesh="wheel_holder" material="wheel_holder_material" />
           <geom mass="0.07" type="mesh" pos="0 0 0.011" quat="9.09876e-17 -0.698162 0.71594 5.21112e-16" mesh="rocker_linkage" material="rocker_linkage_material" />
-          <body name="wheel_linkage" pos="-0.0309912 0.000739345 0.04662" quat="0.184652 0.677713 -0.201753 -0.682571">
+          <body name="wheel_linkage" pos="-0.0309912 0.000739345 0.04662" quat="0.184652 0.677713 -0.201753 -0.682571" axisangle="0 1 0 1.5708">
             <joint axis="0 0 1" name="BR_wheel" />
             <geom mass="0.08" type="mesh" pos="0 0 0" quat="0.707107 0.707107 0 -4.01208e-18" mesh="wheel_linkage" material="wheel_linkage_material" />
-            <body name="BR_wheel_geom" pos="0 0 -0.0165" euler="1.5708 0 0.01">
+            <body name="BR_wheel_geom" pos="0 0 -0.0165">
               <geom name="BR_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 0.8" friction="0.95 0.01 0.01" />
               <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
               <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
@@ -81,10 +81,10 @@
           <joint axis="0 0 1" name="FR_pivot" type="hinge" />
           <geom mass="0.07" type="mesh" pos="2.77556e-17 0 0.011" quat="2.86822e-16 -0.693382 0.72057 1.85896e-16" mesh="rocker_linkage" material="rocker_linkage_material" />
           <geom mass="0.15" type="mesh" pos="-0.00559586 0.000215279 0.05862" quat="2.86822e-16 -0.693382 0.72057 1.85896e-16" mesh="wheel_holder" material="wheel_holder_material" />
-          <body name="wheel_linkage_2" pos="-0.0309786 0.00115175 0.04662" quat="0.333211 0.610404 -0.356941 -0.623675">
+          <body name="wheel_linkage_2" pos="-0.0309786 0.00115175 0.04662" quat="0.333211 0.610404 -0.356941 -0.623675" axisangle="0 1 0 1.5708">
             <joint axis="0 0 1" name="FR_wheel" />
             <geom mass="0.08" type="mesh" pos="2.77556e-17 0 0" quat="0.707107 0.707107 0 1.2503e-17" mesh="wheel_linkage" material="wheel_linkage_material" />
-            <body name="FR_wheel_geom" pos="0 0 -0.0165" euler="1.5708 0 0.01">
+            <body name="FR_wheel_geom" pos="0 0 -0.0165">
               <geom name="FR_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 0.8" friction="0.95 0.01 0.01" />
               <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
               <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
@@ -146,10 +146,10 @@
           <joint axis="0 0 1" name="BL_pivot" type="hinge" />
           <geom mass="0.07" type="mesh" pos="0 0 0.011" quat="1.07501e-18 -0.707107 0.707107 -2.09885e-17" mesh="rocker_linkage" material="rocker_linkage_material" />
           <geom mass="0.15" type="mesh" pos="0.0056 0 0.05862" quat="1.17978e-18 -0.707107 -0.707107 2.0055e-17" mesh="wheel_holder" material="wheel_holder_material" />
-          <body name="wheel_linkage_3" pos="0.031 4e-05 0.04662" quat="0.505916 -0.494014 0.505916 -0.494014">
+          <body name="wheel_linkage_3" pos="0.031 4e-05 0.04662" quat="0.505916 -0.494014 0.505916 -0.494014" axisangle="0 1 0 1.5708">
             <joint axis="0 0 1" name="BL_wheel" />
             <geom mass="0.08" type="mesh" pos="2.77556e-17 -2.77556e-17 -0.052" quat="0.707107 -0.707107 0 -2.35867e-18" mesh="wheel_linkage" material="wheel_linkage_material" />
-            <body name="BL_wheel_geom" pos="0 0 -0.0165" euler="1.5708 0 0.01">
+            <body name="BL_wheel_geom" pos="0 0 -0.0165">
               <geom name="BL_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 0.8" friction="0.95 0.01 0.01" />
               <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
               <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
@@ -206,10 +206,10 @@
           <joint axis="0 0 1" name="FL_pivot" type="hinge" />
           <geom mass="0.07" type="mesh" pos="-1.38778e-16 -2.77556e-17 0.011" quat="3.71573e-18 -0.703399 0.710795 -1.77453e-17" mesh="rocker_linkage" material="rocker_linkage_material" />
           <geom mass="0.15" type="mesh" pos="0.00559969 -5.85778e-05 0.05862" quat="1.10843e-18 -0.710795 -0.703399 1.52529e-17" mesh="wheel_holder" material="wheel_holder_material" />
-          <body name="wheel_linkage_4" pos="0.0309987 -0.000284272 0.04662" quat="0.491361 0.503325 -0.496653 -0.508493">
+          <body name="wheel_linkage_4" pos="0.0309987 -0.000284272 0.04662" quat="0.491361 0.503325 -0.496653 -0.508493" axisangle="0 1 0 1.5708">
             <joint axis="0 0 1" name="FL_wheel" />
             <geom mass="0.08" type="mesh" pos="0 0 0.052" quat="0.707107 0.707107 -0 -1.17884e-18" mesh="wheel_linkage" material="wheel_linkage_material" />
-            <body name="FL_wheel_geom" pos="0 0 0.0165" euler="1.5708 0 0.01">
+            <body name="FL_wheel_geom" pos="0 0 0.0165">
               <geom name="FL_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 0.8" friction="0.95 0.01 0.01" />
               <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
               <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />

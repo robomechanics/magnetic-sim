@@ -18,8 +18,8 @@ TORQUE_MAX = 3.0  # motor drive torque
 # Options:
 #   "drive_up"  – wheels roll up/down the wall
 #   "sideways"  – wheels roll sideways along the wall
-MODE = "drive_up"
-# MODE = "sideways"
+# MODE = "drive_up"
+MODE = "sideways"
 
 # Derived (same as old generator)
 RING_RADIUS = RADIUS - EMBED_R
@@ -113,36 +113,31 @@ def patch_wheel_geom_body(body_elem):
 
 
 # ---------- wheel_linkage: orientation (mode switch) ----------
+# ---------- wheel orientation via joint axes (mode switch) ----------
 def patch_wheel_orientation(root):
-    wheel_bodies = [
-        "BR_wheel_geom",
-        "FR_wheel_geom",
-        "BL_wheel_geom",
-        "FL_wheel_geom",
-    ]
+    """
+    For MODE == "drive_up": do nothing (keep original XML exactly).
+    For MODE == "sideways": rotate the wheel spin direction by changing
+    the hinge joint axis of each wheel (BR/FR/BL/FL).
+    """
 
-    wheel_map = find_bodies_by_name(root, wheel_bodies)
+    if MODE != "sideways":
+        print("[INFO] MODE=drive_up → wheel orientation unchanged.")
+        return
 
-    for name, body in wheel_map.items():
-        if body is None:
-            print(f"[WARN] Could not find '{name}' to rotate.")
-            continue
+    # In sideways mode, make wheels spin about local Y instead of Z
+    # (you can tweak this if you want a different sideways direction)
+    new_axis = "0 1 0"
 
-        # Remove old orientation attributes
-        for attr in ["quat", "euler", "xyaxes", "zaxis", "axisangle"]:
-            if attr in body.attrib:
-                del body.attrib[attr]
+    wheel_joint_names = ["BR_wheel", "FR_wheel", "BL_wheel", "FL_wheel"]
 
-        # Apply mode-based rotation
-        if MODE == "drive_up":
-            # Vertical wheel (rolls like a tank wheel)
-            body.set("euler", f"0 0 {WHEEL_OFFSET_TILT}")
+    for joint in root.iter("joint"):
+        name = joint.get("name", "")
+        if name in wheel_joint_names:
+            old_axis = joint.get("axis", "0 0 1")
+            joint.set("axis", new_axis)
+            print(f"[INFO] Joint {name}: axis {old_axis} -> {new_axis} for MODE=sideways")
 
-        elif MODE == "sideways":
-            # Rotate wheel axis sideways
-            body.set("euler", f"1.5708 0 {WHEEL_OFFSET_TILT}")
-
-        print(f"[INFO] Set orientation for {name} → MODE={MODE}")
 
 
 # ---------- actuators ----------
