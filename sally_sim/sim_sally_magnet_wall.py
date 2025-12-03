@@ -2,6 +2,8 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 import time
+import sys
+import select
 
 # =============================================================================
 # CONFIGURATION
@@ -70,11 +72,17 @@ def add_visual_arrow(scene, from_point, to_point, radius=0.005, rgba=(0, 0, 1, 1
 # =============================================================================
 key_state = {"paused": True}
 
-def key_callback(keycode):
-    c = chr(keycode)
-    if c == CONFIG["pause_key"]:
-        key_state["paused"] = not key_state["paused"]
+def check_keypress():
+    # Non-blocking check for any key typed in terminal
+    dr, dw, de = select.select([sys.stdin], [], [], 0)
+    if dr:
+        return sys.stdin.readline().strip().lower()
+    return None
 
+def key_callback(keycode):
+    # ASCII 32 = space
+    if keycode == 32:
+        key_state["paused"] = not key_state["paused"]
 
 # =============================================================================
 # MAIN
@@ -97,6 +105,7 @@ wheel_geom_ids = []
 wheel_body_ids = []
 
 for w in CONFIG["wheel_names"]:
+    
     gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, w)
     bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, w.replace("_cyl", "_wheel_geom"))
 
@@ -124,28 +133,47 @@ for name in ACTUATOR_NAMES:
     else:
         print("[WARN] Missing actuator:", name)
 
+drive_enabled = False
+
+
 
 # =============================================================================
-# SIMULATION LOOP
+# SIMULATION LOOP (CLEAN VERSION - NO GLFW / NO VIEWER CALLBACKS)
 # =============================================================================
 sim_time = 0.0
 timestep = model.opt.timestep
 
-with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
-    print("[INFO] Running adhesion + wheel torque simulation...")
-    print("[INFO] Press SPACE to pause/resume.")
+TORQUE = 0.5   # sideways torque
 
+with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
+
+    viewer._paused = True          # stop viewer autostep
+    key_state["paused"] = True     # Python pause state
+    drive_enabled = False          # no sideways torque
+
+    # force motors to zero torque at startup
+    for aid in wheel_actuators.values():
+        data.ctrl[aid] = 0.0
     while viewer.is_running():
 
+        # -------- Terminal input (single non-blocking read) --------
+        key = check_keypress()
+        if key == "p":
+            key_state["paused"] = not key_state["paused"]
+            # no pause print (your request)
+
+        if key == "s":
+            drive_enabled = not drive_enabled
+            print(f"[INFO] Drive toggled → {'ENABLED' if drive_enabled else 'DISABLED'}")
+
+        # -------- Clear arrows --------
         viewer.user_scn.ngeom = 0
+
         total_force = np.zeros(3)
-        wheel_forces = {}   # <-- NEW: store individual wheel adhesion values
+        wheel_forces = {}
 
-        # -----------------------------
-        # Compute magnetic forces
-        # -----------------------------
+        # -------- Magnetic force loop --------
         for w, geom_id, body_id in zip(CONFIG["wheel_names"], wheel_geom_ids, wheel_body_ids):
-
             fromto = np.zeros(6)
             dist = mujoco.mj_geomDistance(model, data, geom_id, wall_id, 50, fromto)
 
@@ -166,7 +194,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
             )
             fmag = np.clip(fmag, 0, CONFIG["max_total_force"] / 4)
 
-            wheel_forces[w] = fmag   # <-- NEW
+            wheel_forces[w] = fmag
 
             fvec = fmag * n_hat
             data.xfrc_applied[body_id, :3] = fvec
@@ -177,43 +205,34 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
                 fromto[0:3],
                 fromto[0:3] + (-0.05) * n_hat,
                 radius=CONFIG["arrow_radius"],
-                rgba=CONFIG["arrow_color"]
+                rgba=CONFIG["arrow_color"],
             )
 
-
-
-        # -----------------------------
-        # Apply wheel torques
-        # -----------------------------
+        # -------- Apply torque --------
+        applied_tau = TORQUE if drive_enabled else 0.0
         for aid in wheel_actuators.values():
-            data.ctrl[aid] = TORQUE
+            data.ctrl[aid] = applied_tau
 
-        # -----------------------------
-        # Step simulation
-        # -----------------------------
-        # Step simulation ONLY when running
+        # -------- Step --------
         if not key_state["paused"]:
             mujoco.mj_step(model, data)
             sim_time += timestep
 
-            # Log only when running (no scrolling when paused)
             print(
-                f"t={sim_time:.3f}s | Total |F|={np.linalg.norm(total_force):.2f}N | "
-                f"FL={wheel_forces.get('FL_cyl',0):.1f}  "
-                f"FR={wheel_forces.get('FR_cyl',0):.1f}  "
-                f"BL={wheel_forces.get('BL_cyl',0):.1f}  "
-                f"BR={wheel_forces.get('BR_cyl',0):.1f}"
+                f"t={sim_time:.3f}s | F={np.linalg.norm(total_force):.2f}N | "
+                f"FL={wheel_forces.get('FL_cyl',0):.1f} "
+                f"FR={wheel_forces.get('FR_cyl',0):.1f} "
+                f"BL={wheel_forces.get('BL_cyl',0):.1f} "
+                f"BR={wheel_forces.get('BR_cyl',0):.1f} "
+                f"Drive={'ON' if drive_enabled else 'OFF'}"
             )
 
         viewer.sync()
 
-        # Optional real-time pacing only when running
         if CONFIG["real_time_sync"] and not key_state["paused"]:
             time.sleep(timestep)
 
-
-
-        # End simulation
         if sim_time >= CONFIG["t_max"]:
             print("[INFO] Simulation finished.")
             break
+
