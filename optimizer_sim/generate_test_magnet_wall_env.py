@@ -31,7 +31,9 @@ YAW_180 = [0.0, 0.0, 0.0, 1.0]   # (w=0, z=1)
 # Options:
 #   "drive_up"  – wheels roll up/down the wall
 #   "sideways"  – wheels roll sideways along the wall
-MODE = "sideways"
+MODE = os.environ.get("MODE", "sideways")
+
+# MODE = "sideways"
 
 # Derived
 RING_RADIUS = RADIUS - EMBED_R
@@ -357,5 +359,6 @@ for body in root.iter("body"):
     if body.get("name") in ["rocker_linkage", "rocker_linkage_2", "rocker_linkage_3", "rocker_linkage_4"]:
         print(body.get("name"), body.get("quat"))
 
-# === Auto-launch simulation ===
-launch_simulation()
+# === Auto-launch simulation (only when run manually) ===
+if __name__ == "__main__" and os.environ.get("NO_AUTOLAUNCH", "0") != "1":
+    launch_simulation()

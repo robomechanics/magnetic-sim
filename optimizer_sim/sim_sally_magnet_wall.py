@@ -1,238 +1,391 @@
-import mujoco
-import mujoco.viewer
-import numpy as np
-import time
+"""
+sim_sally_magnet_wall.py
+
+Stage 1: Headless, modular simulation rollout for parameter optimization.
+
+Purpose
+-------
+This module provides a fast, deterministic MuJoCo rollout function that:
+- Applies physics and magnetic parameters
+- Runs a fixed-input simulation (no control optimization)
+- Returns trajectory data and summary metrics
+- Can be called repeatedly by an optimizer or inspection tool
+
+Visualization, keyboard input, and real-time synchronization are intentionally
+excluded from this file. Rendering is handled separately.
+"""
+
+from __future__ import annotations
+
+import os
 import sys
-import select
+import subprocess
+from pathlib import Path
+
+import mujoco
+import numpy as np
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List, Tuple
+
 
 # =============================================================================
-# CONFIGURATION
+# DEFAULT SIMULATION CONFIGURATION
 # =============================================================================
-CONFIG = {
-    "xml_file": "scene.xml",         # your Sally wall scene
+DEFAULT_CONFIG = {
+    # MJCF scene file
+    "xml_file": "scene.xml",
+
+    # Simulation timestep
     "timestep": 0.001,
-    "t_max": 100.0,
-    "real_time_sync": True,
-    "pause_key": " ",
 
-    # Magnetic parameters
-    "Br": 1.48 / 1.5,  
+    # Solver configuration (can become tunable later)
+    "integrator": mujoco.mjtIntegrator.mjINT_IMPLICIT,
+    "o_solref": [4e-4, 25],
+    "o_solimp": [0.99, 0.99, 0.001, 0.5, 2],
+
+    # Magnetic model parameters
+    "Br": 1.48 / 1.5,
     "magnet_volume": np.pi * ((0.025 / 2) ** 2 - (0.016 / 2) ** 2) * 0.025,
-    "max_total_force": 200.0 * 4,     # 4 wheels
-    "distance_min": 0.0001,
-    "distance_max": 0.01,
+    "max_total_force": 200.0 * 4,
     "MU_0": 4 * np.pi * 1e-7,
 
-    # Visual arrows
-    "arrow_radius": 0.005,
-    "arrow_color": (0, 0, 1, 1),
-
-    # Geom naming (Sally XML)
+    # Geometry and actuator naming (must match MJCF)
     "wall_geom_name": "wall_geom",
     "wheel_names": ["FL_cyl", "FR_cyl", "BL_cyl", "BR_cyl"],
+    "actuator_names": [
+        "FL_wheel_motor",
+        "FR_wheel_motor",
+        "BL_wheel_motor",
+        "BR_wheel_motor",
+    ],
 }
 
-# Motor torque magnitude
-TORQUE = 10.0 # N·m
+def run_xml_generator(mode: str = "sideways") -> None:
+    """
+    Runs the XML generator script to produce robot_sally_patched.xml.
+
+    Notes:
+    - This does NOT modify scene.xml, so any wall euler rotation in scene.xml stays as-is.
+    - This assumes generate_test_magnet_wall_env.py writes robot_sally_patched.xml.
+    """
+    script_path = Path(__file__).parent / "generate_test_magnet_wall_env.py"
+    if not script_path.exists():
+        raise FileNotFoundError(f"Cannot find generator script: {script_path}")
+
+    env = os.environ.copy()
+    # The generator currently hard-codes MODE in-file.
+    # If you later add MODE=os.environ.get("MODE"), this will start working automatically.
+    env["MODE"] = mode
+
+    print(f"[INFO] Generating patched robot XML (MODE={mode}) ...")
+    env["NO_AUTOLAUNCH"] = "1"  # prevent the generator from launching sim
+    subprocess.run([sys.executable, str(script_path)], check=True, env=env)
+
 
 
 # =============================================================================
-# FORCE MODEL
+# ROLLOUT RESULT STRUCTURE
 # =============================================================================
-def calculate_magnetic_force(distance, Br, V, MU_0):
-    if distance <= 0:
+@dataclass
+class RolloutResult:
+    """
+    Container for rollout output.
+
+    termination:
+        Reason the rollout ended ("ok" or "unstable")
+    steps:
+        Number of simulation steps executed
+    sim_time:
+        Final simulation time in seconds
+    trajectory:
+        Downsampled state history
+    summary:
+        Aggregate metrics for evaluation
+    params_applied:
+        Readback of parameters actually applied to the model
+    """
+    termination: str
+    steps: int
+    sim_time: float
+    trajectory: List[Dict[str, Any]]
+    summary: Dict[str, Any]
+    params_applied: Dict[str, Any]
+
+
+# =============================================================================
+# MAGNETIC FORCE MODEL
+# =============================================================================
+def calculate_magnetic_force(distance: float, Br: float, V: float, MU_0: float) -> float:
+    """
+    Computes magnetic attraction force magnitude as a function of distance.
+
+    Args:
+        distance: Separation between magnet and wall
+        Br: Residual flux density
+        V: Magnet volume
+        MU_0: Magnetic permeability of free space
+
+    Returns:
+        Scalar magnetic force magnitude
+    """
+    if distance <= 0.0:
         return 0.0
     m = (Br * V) / MU_0
     return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * distance) ** 4)
 
+# =============================================================================
+# MODEL CONSTRUCTION AND RESET
+# =============================================================================
+def build_model(config: Dict[str, Any]) -> Tuple[mujoco.MjModel, Dict[str, Any]]:
+    """
+    Builds the MuJoCo model and resolves all geometry/body/actuator IDs once.
 
-def add_visual_arrow(scene, from_point, to_point, radius=0.005, rgba=(0, 0, 1, 1)):
-    if scene.ngeom >= scene.maxgeom:
-        return
-    mujoco.mjv_initGeom(
-        scene.geoms[scene.ngeom],
-        type=mujoco.mjtGeom.mjGEOM_ARROW,
-        size=np.array([radius, radius, np.linalg.norm(to_point - from_point)]),
-        pos=np.zeros(3),
-        mat=np.eye(3).flatten(),
-        rgba=np.array(rgba, dtype=np.float32),
+    Resolving names outside the rollout loop improves performance and
+    guarantees consistent indexing during optimization.
+
+    Returns:
+        model: MuJoCo model
+        ids: Dictionary of resolved IDs needed during rollout
+    """
+    model = mujoco.MjModel.from_xml_path(config["xml_file"])
+
+    # Deterministic solver configuration
+    model.opt.timestep = float(config["timestep"])
+    model.opt.integrator = config["integrator"]
+    model.opt.o_solref[:] = np.array(config["o_solref"], dtype=np.float64)
+    model.opt.o_solimp[:] = np.array(config["o_solimp"], dtype=np.float64)
+
+    # Resolve wall geometry
+    wall_id = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_GEOM, config["wall_geom_name"]
     )
-    mujoco.mjv_connector(
-        scene.geoms[scene.ngeom],
-        mujoco.mjtGeom.mjGEOM_ARROW,
-        radius,
-        from_point,
-        to_point,
-    )
-    scene.ngeom += 1
+    if wall_id < 0:
+        raise ValueError(f"Wall geometry '{config['wall_geom_name']}' not found")
+
+    # Resolve wheel geometries and corresponding bodies
+    wheel_geom_ids = []
+    wheel_body_ids = []
+    wheel_names = []
+
+    for name in config["wheel_names"]:
+        gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+        body_name = name.replace("_cyl", "_wheel_geom")
+        bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+
+        if gid >= 0 and bid >= 0:
+            wheel_names.append(name)
+            wheel_geom_ids.append(gid)
+            wheel_body_ids.append(bid)
+
+    if not wheel_geom_ids:
+        raise ValueError("No valid wheel geometries found")
+
+    # Resolve wheel actuators
+    wheel_actuator_ids = []
+    actuator_names = []
+    for name in config["actuator_names"]:
+        aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+        if aid >= 0:
+            actuator_names.append(name)
+            wheel_actuator_ids.append(aid)
+
+    ids = {
+        "wall_id": wall_id,
+        "wheel_names": wheel_names,
+        "wheel_geom_ids": wheel_geom_ids,
+        "wheel_body_ids": wheel_body_ids,
+        "actuator_names": actuator_names,
+        "wheel_actuator_ids": wheel_actuator_ids,
+    }
+    return model, ids
+
+
+def reset_data(model: mujoco.MjModel) -> mujoco.MjData:
+    """
+    Creates a fresh simulation state with cleared forces and controls.
+
+    This ensures deterministic rollouts across optimizer calls.
+    """
+    data = mujoco.MjData(model)
+    data.xfrc_applied[:] = 0.0
+    if model.nu > 0:
+        data.ctrl[:] = 0.0
+    return data
+
+
+def apply_params(
+    model: mujoco.MjModel, params: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Applies tunable simulation parameters to the model.
+
+    Returns a readback dictionary to verify that parameters were applied
+    correctly (important for optimization sanity checks).
+    """
+    if "timestep" in params:
+        model.opt.timestep = float(params["timestep"])
+    if "o_solref" in params:
+        model.opt.o_solref[:] = np.array(params["o_solref"], dtype=np.float64)
+    if "o_solimp" in params:
+        model.opt.o_solimp[:] = np.array(params["o_solimp"], dtype=np.float64)
+
+    return {
+        "timestep": float(model.opt.timestep),
+        "o_solref": model.opt.o_solref.copy().tolist(),
+        "o_solimp": model.opt.o_solimp.copy().tolist(),
+    }
 
 
 # =============================================================================
-# KEYBOARD
+# HEADLESS ROLLOUT FUNCTION
 # =============================================================================
-key_state = {"paused": True}
+def rollout(
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    sim_duration: float = 5.0,
+    config: Optional[Dict[str, Any]] = None,
+    fixed_torque: float = 0.5,
+    settle_time: float = 0.0,
+    log_stride: int = 10,
+) -> RolloutResult:
+    """
+    Runs a headless MuJoCo rollout with fixed actuation.
 
-def check_keypress():
-    # Non-blocking check for any key typed in terminal
-    dr, dw, de = select.select([sys.stdin], [], [], 0)
-    if dr:
-        return sys.stdin.readline().strip().lower()
-    return None
+    Args:
+        params: Tunable physics parameters (optimizer input)
+        sim_duration: Total simulation time in seconds
+        config: Optional override of DEFAULT_CONFIG
+        fixed_torque: Constant torque applied to wheel actuators
+        settle_time: Optional initial settling time (no logging)
+        log_stride: Log every N steps to reduce data volume
 
-def key_callback(keycode):
-    # ASCII 32 = space
-    if keycode == 32:
-        key_state["paused"] = not key_state["paused"]
+    Returns:
+        RolloutResult object
+    """
+    cfg = dict(DEFAULT_CONFIG)
+    if config:
+        cfg.update(config)
+    params = params or {}
 
-# =============================================================================
-# MAIN
-# =============================================================================
-print(f"[INFO] Loading {CONFIG['xml_file']} ...")
-model = mujoco.MjModel.from_xml_path(CONFIG["xml_file"])
-data = mujoco.MjData(model)
+    # Regenerate the patched robot XML before loading the model.
+    # (scene.xml is not modified here, so your wall euler rotation stays as-is.)
+    run_xml_generator(mode=params.get("mode", "sideways"))
 
-model.opt.timestep = CONFIG["timestep"]
-model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICIT
-model.opt.o_solref[:] = [4e-4, 25]
-model.opt.o_solimp[:] = [0.99, 0.99, 0.001, 0.5, 2]
-
-
-# --- Get wall ID ---
-wall_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, CONFIG["wall_geom_name"])
-
-# --- Get wheel geom + body IDs ---
-wheel_geom_ids = []
-wheel_body_ids = []
-
-for w in CONFIG["wheel_names"]:
-    
-    gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, w)
-    bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, w.replace("_cyl", "_wheel_geom"))
-
-    if gid == -1 or bid == -1:
-        print(f"[WARN] Missing wheel {w}")
-        continue
-
-    wheel_geom_ids.append(gid)
-    wheel_body_ids.append(bid)
+    model, ids = build_model(cfg)
+    params_applied = apply_params(model, params)
+    data = reset_data(model)
 
 
-# --- Get motor actuator IDs ---
-ACTUATOR_NAMES = [
-    "FL_wheel_motor",
-    "FR_wheel_motor",
-    "BL_wheel_motor",
-    "BR_wheel_motor"
-]
+    dt = model.opt.timestep
+    n_steps = int(np.ceil(sim_duration / dt))
 
-wheel_actuators = {}
-for name in ACTUATOR_NAMES:
-    aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
-    if aid >= 0:
-        wheel_actuators[name] = aid
-    else:
-        print("[WARN] Missing actuator:", name)
-
-drive_enabled = False
+    Br = params.get("Br", cfg["Br"])
+    magnet_volume = params.get("magnet_volume", cfg["magnet_volume"])
+    MU_0 = params.get("MU_0", cfg["MU_0"])
+    n_wheels = max(1, len(ids["wheel_body_ids"]))
+    max_force_per_wheel = cfg["max_total_force"] / n_wheels
 
 
+    fromto = np.zeros(6)
+    trajectory = []
+    termination = "ok"
+    total_force_accum = 0.0
+    force_samples = 0
 
-# =============================================================================
-# SIMULATION LOOP (CLEAN VERSION - NO GLFW / NO VIEWER CALLBACKS)
-# =============================================================================
-sim_time = 0.0
-timestep = model.opt.timestep
+    # Optional settling phase (use ceil so the requested settle_time is honored)
+    k = -1
+    settle_steps = int(np.ceil(settle_time / dt))
+    for _ in range(settle_steps):
+        mujoco.mj_step(model, data)
 
-TORQUE = 0.5   # sideways torque
+    try:
+        for k in range(n_steps):
+            # Clear applied forces to avoid accumulation
+            for bid in ids["wheel_body_ids"]:
+                data.xfrc_applied[bid, :3] = 0.0
 
-with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
+            total_force = np.zeros(3)
+            wheel_forces = {}
 
-    viewer._paused = True          # stop viewer autostep
-    key_state["paused"] = True     # Python pause state
-    drive_enabled = False          # no sideways torque
+            # Magnetic force computation
+            for name, gid, bid in zip(
+                ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]
+            ):
+                dist = mujoco.mj_geomDistance(
+                    model, data, gid, ids["wall_id"], 50, fromto
+                )
+                if dist < 0:
+                    wheel_forces[name] = 0.0
+                    continue
 
-    # force motors to zero torque at startup
-    for aid in wheel_actuators.values():
-        data.ctrl[aid] = 0.0
-    while viewer.is_running():
+                n = fromto[3:6] - fromto[0:3]
+                norm = np.linalg.norm(n)
+                if norm < 1e-9:
+                    wheel_forces[name] = 0.0
+                    continue
 
-        # -------- Terminal input (single non-blocking read) --------
-        key = check_keypress()
-        if key == "p":
-            key_state["paused"] = not key_state["paused"]
-            # no pause print (your request)
+                fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
+                fmag = np.clip(fmag, 0.0, max_force_per_wheel)
+                wheel_forces[name] = float(fmag)
 
-        if key == "s":
-            drive_enabled = not drive_enabled
-            print(f"[INFO] Drive toggled → {'ENABLED' if drive_enabled else 'DISABLED'}")
+                fvec = fmag * (n / norm)
+                data.xfrc_applied[bid, :3] = fvec
+                total_force += fvec
 
-        # -------- Clear arrows --------
-        viewer.user_scn.ngeom = 0
+            # Fixed actuation
+            for aid in ids["wheel_actuator_ids"]:
+                data.ctrl[aid] = fixed_torque
 
-        total_force = np.zeros(3)
-        wheel_forces = {}
-
-        # -------- Magnetic force loop --------
-        for w, geom_id, body_id in zip(CONFIG["wheel_names"], wheel_geom_ids, wheel_body_ids):
-            fromto = np.zeros(6)
-            dist = mujoco.mj_geomDistance(model, data, geom_id, wall_id, 50, fromto)
-
-            if dist < 0:
-                wheel_forces[w] = 0.0
-                continue
-
-            n = fromto[3:6] - fromto[0:3]
-            n_norm = np.linalg.norm(n)
-            if n_norm < 1e-6:
-                wheel_forces[w] = 0.0
-                continue
-
-            n_hat = n / n_norm
-
-            fmag = calculate_magnetic_force(
-                dist, CONFIG["Br"], CONFIG["magnet_volume"], CONFIG["MU_0"]
-            )
-            fmag = np.clip(fmag, 0, CONFIG["max_total_force"] / 4)
-
-            wheel_forces[w] = fmag
-
-            fvec = fmag * n_hat
-            data.xfrc_applied[body_id, :3] = fvec
-            total_force += fvec
-
-            add_visual_arrow(
-                viewer.user_scn,
-                fromto[0:3],
-                fromto[0:3] + (-0.05) * n_hat,
-                radius=CONFIG["arrow_radius"],
-                rgba=CONFIG["arrow_color"],
-            )
-
-        # -------- Apply torque --------
-        applied_tau = TORQUE if drive_enabled else 0.0
-        for aid in wheel_actuators.values():
-            data.ctrl[aid] = applied_tau
-
-        # -------- Step --------
-        if not key_state["paused"]:
             mujoco.mj_step(model, data)
-            sim_time += timestep
 
-            print(
-                f"t={sim_time:.3f}s | F={np.linalg.norm(total_force):.2f}N | "
-                f"FL={wheel_forces.get('FL_cyl',0):.1f} "
-                f"FR={wheel_forces.get('FR_cyl',0):.1f} "
-                f"BL={wheel_forces.get('BL_cyl',0):.1f} "
-                f"BR={wheel_forces.get('BR_cyl',0):.1f} "
-                f"Drive={'ON' if drive_enabled else 'OFF'}"
-            )
+            # Instability detection
+            if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():
+                termination = "unstable"
+                break
 
-        viewer.sync()
+            # Downsampled logging
+            if k % log_stride == 0 or k == n_steps - 1:
+                trajectory.append({
+                    "time": float(data.time),
+                    "qpos": data.qpos[:7].copy(),
+                    "qvel": data.qvel[:6].copy(),
+                    "total_force": total_force.copy(),
+                    "wheel_forces": wheel_forces,
+                })
 
-        if CONFIG["real_time_sync"] and not key_state["paused"]:
-            time.sleep(timestep)
+            total_force_accum += np.linalg.norm(total_force)
+            force_samples += 1
 
-        if sim_time >= CONFIG["t_max"]:
-            print("[INFO] Simulation finished.")
-            break
+    except Exception:
+        termination = "unstable"
 
+    summary = {
+        "final_base_position": data.qpos[:3].copy().tolist(),
+        "avg_total_magnetic_force": (
+            total_force_accum / max(1, force_samples)
+        ),
+    }
+
+    return RolloutResult(
+        termination=termination,
+        steps=max(0, k + 1),
+        sim_time=float(data.time),
+        trajectory=trajectory,
+        summary=summary,
+        params_applied={
+            **params_applied,
+            "Br": Br,
+            "magnet_volume": magnet_volume,
+            "MU_0": MU_0,
+            "fixed_torque": fixed_torque,
+        },
+    )
+
+
+# =============================================================================
+# SIMPLE HEADLESS TEST
+# =============================================================================
+if __name__ == "__main__":
+    result = rollout(sim_duration=2.0)
+    print("Termination:", result.termination)
+    print("Summary:", result.summary)
