@@ -13,11 +13,11 @@
     
   </default>
   <worldbody>
-    <body name="magnetic_wall" pos="0.25 0 0.35" euler="0 0.785398163 0">
+    <body name="magnetic_wall" pos="0.25 0 0.35">
       <geom name="wall_geom" type="box" size="0.02 0.7 0.7" rgba="0.8 0.8 0.8 1" friction="0.95 0.1 0.1" contype="1" conaffinity="1" />
     </body>
     <light pos="0 0 2" dir="0 0 -1" directional="true" diffuse="0.8 0.8 0.8" />
-    <body name="frame" pos="0.05 0 0.5" quat="0 -0.38268 0 0.92388">
+    <body name="frame" pos="0.035 0 0.35" quat="0 -0.7071 0 0.7071">
       <freejoint />
       <geom mass="1.418814" type="mesh" pos="0.0180739 0.00440379 -0.0885384" quat="6.64008e-06 -7.24299e-06 1 -1.68313e-05" mesh="frame" material="frame_material" />
       <body name="frame_linkage" pos="0.0180761 -0.139947 -0.101144" quat="0.707094 -0.707118 -0.00101616 -0.00100588">

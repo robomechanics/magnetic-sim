@@ -48,8 +48,7 @@ POINT_SIZE = "0.002" if DEBUG_VISIBLE else "0.001"
 # File paths
 # ===========================
 INPUT_FILE = "robot_sally.xml"
-OUTPUT_FILE = "robot_sally_patched.xml"
-
+OUTPUT_FILE = os.environ.get("OUTPUT_FILE", "robot_sally_patched.xml")  # ← Allow override
 
 # ===========================
 # Helpers
@@ -285,6 +284,7 @@ def launch_simulation():
 # Main patch routine
 # ===========================
 print(f"[INFO] Loading {INPUT_FILE} ...")
+print(f"[DEBUG] MODE from environment: {MODE}")  # ← ADD THIS LINE
 tree = ET.parse(INPUT_FILE)
 root = tree.getroot()
 remove_self_includes(root)

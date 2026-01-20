@@ -20,13 +20,14 @@ from __future__ import annotations
 import os
 import sys
 import subprocess
-from pathlib import Path
-
 import mujoco
 import numpy as np
+
+from pathlib import Path
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Tuple
-
+from scipy.spatial.transform import Rotation as R
 
 # =============================================================================
 # DEFAULT SIMULATION CONFIGURATION
@@ -44,13 +45,20 @@ DEFAULT_CONFIG = {
     "o_solimp": [0.99, 0.99, 0.001, 0.5, 2],
 
     # Magnetic model parameters
-    "Br": 1.48 / 1.5,
+    "Br": 1.48,
     "magnet_volume": np.pi * ((0.025 / 2) ** 2 - (0.016 / 2) ** 2) * 0.025,
     "max_total_force": 200.0 * 4,
     "MU_0": 4 * np.pi * 1e-7,
 
+    # Wall orientation (euler angles in radians: [roll, pitch, yaw])
+    "wall_euler": [0, 0.785398163, 0],  # 45° pitch = 45° incline
+    "robot_body_name": "frame",
+    "robot_initial_quat": None, # If None, compute from wall_euler automatically
+    "robot_position_offset": [0.0, 0.0, 0.0],  # Offset in wall's local frame [along, across, normal]
+
     # Geometry and actuator naming (must match MJCF)
     "wall_geom_name": "wall_geom",
+    "wall_body_name": "magnetic_wall",
     "wheel_names": ["FL_cyl", "FR_cyl", "BL_cyl", "BR_cyl"],
     "actuator_names": [
         "FL_wheel_motor",
@@ -60,28 +68,60 @@ DEFAULT_CONFIG = {
     ],
 }
 
-def run_xml_generator(mode: str = "sideways") -> None:
+def run_xml_generator(mode: str = "sideways") -> str:
     """
-    Runs the XML generator script to produce robot_sally_patched.xml.
-
-    Notes:
-    - This does NOT modify scene.xml, so any wall euler rotation in scene.xml stays as-is.
-    - This assumes generate_test_magnet_wall_env.py writes robot_sally_patched.xml.
+    Runs the XML generator script to produce robot_sally_patched_<timestamp>.xml.
+    Returns the path to the generated file (in current directory).
     """
     script_path = Path(__file__).parent / "generate_test_magnet_wall_env.py"
     if not script_path.exists():
         raise FileNotFoundError(f"Cannot find generator script: {script_path}")
 
+    # Generate unique filename in CURRENT directory (not subfolder)
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    pid = os.getpid()
+    output_file = f"robot_sally_patched_{timestamp}_pid{pid}.xml"
+    
     env = os.environ.copy()
-    # The generator currently hard-codes MODE in-file.
-    # If you later add MODE=os.environ.get("MODE"), this will start working automatically.
     env["MODE"] = mode
-
-    print(f"[INFO] Generating patched robot XML (MODE={mode}) ...")
-    env["NO_AUTOLAUNCH"] = "1"  # prevent the generator from launching sim
+    env["OUTPUT_FILE"] = output_file
+    env["NO_AUTOLAUNCH"] = "1"
+    
+    print(f"[INFO] Generating patched robot XML (MODE={mode}) -> {output_file}")
     subprocess.run([sys.executable, str(script_path)], check=True, env=env)
+    
+    return output_file
 
 
+def generate_scene_with_robot(patched_robot_file: str) -> str:
+    """
+    Create a temporary scene.xml that includes the specified patched robot file.
+    Returns path to the temporary scene file (in current directory).
+    """
+    import xml.etree.ElementTree as ET
+    
+    # Parse original scene.xml
+    scene_tree = ET.parse("scene.xml")
+    scene_root = scene_tree.getroot()
+    
+    # Get just the filename for the include
+    patched_robot_filename = Path(patched_robot_file).name
+    
+    # Find and update the include element
+    for elem in scene_root.iter():
+        if elem.tag == "include":
+            old_file = elem.get("file", "")
+            if "robot_sally_patched" in old_file:
+                elem.set("file", patched_robot_filename)
+                break
+    
+    # Write to temporary file in CURRENT directory (same as assets/)
+    temp_scene_file = f"scene_{Path(patched_robot_file).stem}.xml"
+    ET.indent(scene_tree, space="  ")
+    scene_tree.write(temp_scene_file, encoding="utf-8", xml_declaration=True)
+    
+    return temp_scene_file
 
 # =============================================================================
 # ROLLOUT RESULT STRUCTURE
@@ -139,13 +179,6 @@ def calculate_magnetic_force(distance: float, Br: float, V: float, MU_0: float) 
 def build_model(config: Dict[str, Any]) -> Tuple[mujoco.MjModel, Dict[str, Any]]:
     """
     Builds the MuJoCo model and resolves all geometry/body/actuator IDs once.
-
-    Resolving names outside the rollout loop improves performance and
-    guarantees consistent indexing during optimization.
-
-    Returns:
-        model: MuJoCo model
-        ids: Dictionary of resolved IDs needed during rollout
     """
     model = mujoco.MjModel.from_xml_path(config["xml_file"])
 
@@ -155,6 +188,12 @@ def build_model(config: Dict[str, Any]) -> Tuple[mujoco.MjModel, Dict[str, Any]]
     model.opt.o_solref[:] = np.array(config["o_solref"], dtype=np.float64)
     model.opt.o_solimp[:] = np.array(config["o_solimp"], dtype=np.float64)
 
+    # Apply wall rotation
+    if "wall_euler" in config:
+        apply_wall_rotation(model, config["wall_euler"], config["wall_body_name"])
+
+    # NOTE: Robot initial pose is applied in reset_data() since it modifies qpos
+    
     # Resolve wall geometry
     wall_id = mujoco.mj_name2id(
         model, mujoco.mjtObj.mjOBJ_GEOM, config["wall_geom_name"]
@@ -200,41 +239,174 @@ def build_model(config: Dict[str, Any]) -> Tuple[mujoco.MjModel, Dict[str, Any]]
     return model, ids
 
 
-def reset_data(model: mujoco.MjModel) -> mujoco.MjData:
+def reset_data(model: mujoco.MjModel, config: Dict[str, Any]) -> mujoco.MjData:
     """
     Creates a fresh simulation state with cleared forces and controls.
-
-    This ensures deterministic rollouts across optimizer calls.
+    Also sets robot's initial orientation and position.
     """
     data = mujoco.MjData(model)
     data.xfrc_applied[:] = 0.0
     if model.nu > 0:
         data.ctrl[:] = 0.0
+    
+    # Apply robot initial pose
+    wall_euler = config.get("wall_euler", [0, 0.785398163, 0])
+    robot_quat = config.get("robot_initial_quat", None)
+    position_offset = config.get("robot_position_offset", [0.0, 0.0, 0.0])
+    
+    apply_robot_initial_pose(
+        model, 
+        data, 
+        wall_euler, 
+        config["robot_body_name"],
+        robot_quat,
+        position_offset
+    )
+    
     return data
 
 
+# In sim_sally_magnet_wall.py, update apply_params():
+
 def apply_params(
-    model: mujoco.MjModel, params: Dict[str, Any]
+    model: mujoco.MjModel, params: Dict[str, Any], config: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Applies tunable simulation parameters to the model.
-
-    Returns a readback dictionary to verify that parameters were applied
-    correctly (important for optimization sanity checks).
     """
+    # Existing timestep/solver params
     if "timestep" in params:
         model.opt.timestep = float(params["timestep"])
     if "o_solref" in params:
         model.opt.o_solref[:] = np.array(params["o_solref"], dtype=np.float64)
     if "o_solimp" in params:
         model.opt.o_solimp[:] = np.array(params["o_solimp"], dtype=np.float64)
+    
+    # Wall rotation (optional tunable parameter)
+    if "wall_euler" in params:
+        apply_wall_rotation(model, params["wall_euler"], config["wall_body_name"])
+    
+    # Friction parameters (applied to wheel cylinder geoms)
+    if "wheel_friction" in params:
+        friction = params["wheel_friction"]  # [sliding, torsional, rolling]
+        wheel_cyl_names = ["BR_cyl", "FR_cyl", "BL_cyl", "FL_cyl"]
+        
+        for name in wheel_cyl_names:
+            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+            if gid >= 0:
+                model.geom_friction[gid, :] = np.array(friction, dtype=np.float64)
+    
+    # Joint damping parameters
+    if "wheel_damping" in params:
+        wheel_joint_names = ["BR_wheel", "FR_wheel", "BL_wheel", "FL_wheel"]
+        for name in wheel_joint_names:
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            if jid >= 0:
+                model.dof_damping[jid] = float(params["wheel_damping"])
+    
+    if "rocker_stiffness" in params:
+        rocker_joint_names = ["left_hinge", "right_hinge", "BR_pivot", "FR_pivot", "BL_pivot", "FL_pivot"]
+        for name in rocker_joint_names:
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            if jid >= 0:
+                model.jnt_stiffness[jid] = float(params["rocker_stiffness"])
+    
+    if "rocker_damping" in params:
+        rocker_joint_names = ["left_hinge", "right_hinge", "BR_pivot", "FR_pivot", "BL_pivot", "FL_pivot"]
+        for name in rocker_joint_names:
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            if jid >= 0:
+                model.dof_damping[jid] = float(params["rocker_damping"])
 
-    return {
+    readback = {
         "timestep": float(model.opt.timestep),
         "o_solref": model.opt.o_solref.copy().tolist(),
         "o_solimp": model.opt.o_solimp.copy().tolist(),
+        "wheel_friction": params.get("wheel_friction", [0.95, 0.01, 0.01]),
+        "wheel_damping": params.get("wheel_damping", 0.1),
+        "rocker_stiffness": params.get("rocker_stiffness", 30.0),
+        "rocker_damping": params.get("rocker_damping", 1.0),
     }
+    
+    # Include wall_euler in readback if it was applied
+    if "wall_euler" in params:
+        readback["wall_euler"] = params["wall_euler"]
+    
+    return readback
 
+def apply_wall_rotation(model: mujoco.MjModel, euler: List[float], wall_body_name: str) -> None:
+    """
+    Apply wall rotation from euler angles [roll, pitch, yaw] in radians.
+    
+    Args:
+        model: MuJoCo model
+        euler: [roll, pitch, yaw] rotation in radians
+        wall_body_name: Name of the wall body in the model
+    """
+    wall_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, wall_body_name)
+    if wall_body_id < 0:
+        print(f"[WARN] Wall body '{wall_body_name}' not found, skipping rotation")
+        return
+    
+    # Convert euler (XYZ intrinsic) to quaternion
+    rot = R.from_euler('xyz', euler, degrees=False)
+    quat = rot.as_quat()  # [x, y, z, w] (scipy format)
+    
+    # MuJoCo uses [w, x, y, z] format
+    model.body_quat[wall_body_id] = np.array([quat[3], quat[0], quat[1], quat[2]], dtype=np.float64)
+    
+    print(f"[INFO] Applied wall rotation: euler={euler} -> quat=[{quat[3]:.4f}, {quat[0]:.4f}, {quat[1]:.4f}, {quat[2]:.4f}]")
+
+def apply_robot_initial_pose(
+    model: mujoco.MjModel, 
+    data: mujoco.MjData,
+    wall_euler: List[float], 
+    robot_body_name: str,
+    robot_quat: Optional[List[float]] = None,
+    position_offset: Optional[List[float]] = None
+) -> None:
+    """
+    Apply robot's initial orientation and position.
+    position_offset is in wall's local frame: [along_wall, across_wall, away_from_wall]
+    """
+    robot_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, robot_body_name)
+    if robot_body_id < 0:
+        print(f"[WARN] Robot body '{robot_body_name}' not found, skipping pose")
+        return
+    
+    # Compute orientation
+    if robot_quat is not None:
+        quat_mujoco = np.array(robot_quat, dtype=np.float64)
+    else:
+        wall_rot = R.from_euler('xyz', wall_euler, degrees=False)
+        perp_rot = R.from_euler('y', -np.pi/2, degrees=False)
+        robot_rot = wall_rot * perp_rot
+        
+        quat_scipy = robot_rot.as_quat()
+        quat_mujoco = np.array([quat_scipy[3], quat_scipy[0], quat_scipy[1], quat_scipy[2]], dtype=np.float64)
+    
+    # Compute position offset in world frame
+    if position_offset is not None and any(position_offset):
+        wall_rot = R.from_euler('xyz', wall_euler, degrees=False)
+        # Transform offset from wall's local frame to world frame
+        offset_world = wall_rot.apply(position_offset)
+    else:
+        offset_world = np.zeros(3)
+    
+    # Apply to freejoint
+    for i in range(model.njnt):
+        if model.jnt_bodyid[i] == robot_body_id and model.jnt_type[i] == mujoco.mjtJoint.mjJNT_FREE:
+            jnt_qposadr = model.jnt_qposadr[i]
+            
+            # Position (qpos[0:3])
+            current_pos = data.qpos[jnt_qposadr:jnt_qposadr + 3].copy()
+            data.qpos[jnt_qposadr:jnt_qposadr + 3] = current_pos + offset_world
+            
+            # Orientation (qpos[3:7])
+            data.qpos[jnt_qposadr + 3:jnt_qposadr + 7] = quat_mujoco
+            
+            print(f"[INFO] Robot position offset: {offset_world}, orientation: {quat_mujoco}")
+            return
 
 # =============================================================================
 # HEADLESS ROLLOUT FUNCTION
@@ -248,139 +420,173 @@ def rollout(
     settle_time: float = 0.0,
     log_stride: int = 10,
 ) -> RolloutResult:
-    """
-    Runs a headless MuJoCo rollout with fixed actuation.
+    from metrics import compute_metrics, MetricConfig
 
-    Args:
-        params: Tunable physics parameters (optimizer input)
-        sim_duration: Total simulation time in seconds
-        config: Optional override of DEFAULT_CONFIG
-        fixed_torque: Constant torque applied to wheel actuators
-        settle_time: Optional initial settling time (no logging)
-        log_stride: Log every N steps to reduce data volume
-
-    Returns:
-        RolloutResult object
-    """
     cfg = dict(DEFAULT_CONFIG)
     if config:
         cfg.update(config)
     params = params or {}
 
-    # Regenerate the patched robot XML before loading the model.
-    # (scene.xml is not modified here, so your wall euler rotation stays as-is.)
-    run_xml_generator(mode=params.get("mode", "sideways"))
+    rollout_mode = params.get("rollout_mode", "drive")
+    xml_mode = params.get("mode", "sideways")
 
-    model, ids = build_model(cfg)
-    params_applied = apply_params(model, params)
-    data = reset_data(model)
-
-
-    dt = model.opt.timestep
-    n_steps = int(np.ceil(sim_duration / dt))
-
-    Br = params.get("Br", cfg["Br"])
-    magnet_volume = params.get("magnet_volume", cfg["magnet_volume"])
-    MU_0 = params.get("MU_0", cfg["MU_0"])
-    n_wheels = max(1, len(ids["wheel_body_ids"]))
-    max_force_per_wheel = cfg["max_total_force"] / n_wheels
-
-
-    fromto = np.zeros(6)
-    trajectory = []
-    termination = "ok"
-    total_force_accum = 0.0
-    force_samples = 0
-
-    # Optional settling phase (use ceil so the requested settle_time is honored)
-    k = -1
-    settle_steps = int(np.ceil(settle_time / dt))
-    for _ in range(settle_steps):
-        mujoco.mj_step(model, data)
+    # Generate patched robot XML
+    patched_robot_file = run_xml_generator(mode=xml_mode)
+    
+    # Generate temporary scene.xml that includes the patched robot
+    temp_scene_file = generate_scene_with_robot(patched_robot_file)
+    
+    # Use the temporary scene file
+    cfg["xml_file"] = temp_scene_file
 
     try:
-        for k in range(n_steps):
-            # Clear applied forces to avoid accumulation
-            for bid in ids["wheel_body_ids"]:
-                data.xfrc_applied[bid, :3] = 0.0
+        model, ids = build_model(cfg)
+        params_applied = apply_params(model, params, cfg)
+        data = reset_data(model, cfg)
+        base_pos0 = data.qpos[:3].copy()
+        step_records: List[Dict[str, Any]] = []
+        
+        # Create metric config with proper mode
+        metric_cfg = MetricConfig(mode=rollout_mode)
 
-            total_force = np.zeros(3)
-            wheel_forces = {}
+        dt = model.opt.timestep
+        n_steps = int(np.ceil(sim_duration / dt))
 
-            # Magnetic force computation
-            for name, gid, bid in zip(
-                ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]
-            ):
-                dist = mujoco.mj_geomDistance(
-                    model, data, gid, ids["wall_id"], 50, fromto
-                )
-                if dist < 0:
-                    wheel_forces[name] = 0.0
-                    continue
+        Br = params.get("Br", cfg["Br"])
+        magnet_volume = params.get("magnet_volume", cfg["magnet_volume"])
+        MU_0 = params.get("MU_0", cfg["MU_0"])
+        n_wheels = max(1, len(ids["wheel_body_ids"]))
+        max_force_per_wheel = cfg["max_total_force"] / n_wheels
 
-                n = fromto[3:6] - fromto[0:3]
-                norm = np.linalg.norm(n)
-                if norm < 1e-9:
-                    wheel_forces[name] = 0.0
-                    continue
+        fromto = np.zeros(6)
+        trajectory = []
+        termination = "ok"
+        total_force_accum = 0.0
+        force_samples = 0
 
-                fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
-                fmag = np.clip(fmag, 0.0, max_force_per_wheel)
-                wheel_forces[name] = float(fmag)
-
-                fvec = fmag * (n / norm)
-                data.xfrc_applied[bid, :3] = fvec
-                total_force += fvec
-
-            # Fixed actuation
-            for aid in ids["wheel_actuator_ids"]:
-                data.ctrl[aid] = fixed_torque
-
+        # Optional settling phase
+        k = -1
+        settle_steps = int(np.ceil(settle_time / dt))
+        for _ in range(settle_steps):
             mujoco.mj_step(model, data)
 
-            # Instability detection
-            if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():
-                termination = "unstable"
-                break
+        try:
+            for k in range(n_steps):
+                # Clear applied forces to avoid accumulation
+                for bid in ids["wheel_body_ids"]:
+                    data.xfrc_applied[bid, :3] = 0.0
 
-            # Downsampled logging
-            if k % log_stride == 0 or k == n_steps - 1:
-                trajectory.append({
+                total_force = np.zeros(3)
+                wheel_forces = {}
+                wheel_dists = []
+
+                # Magnetic force computation
+                for name, gid, bid in zip(
+                    ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]
+                ):
+                    dist = mujoco.mj_geomDistance(
+                        model, data, gid, ids["wall_id"], 50, fromto
+                    )
+
+                    if dist < 0:
+                        wheel_forces[name] = 0.0
+                        wheel_dists.append(float("inf"))
+                        continue
+                    else:
+                        wheel_dists.append(float(dist))
+
+                    n = fromto[3:6] - fromto[0:3]
+                    norm = np.linalg.norm(n)
+                    if norm < 1e-9:
+                        wheel_forces[name] = 0.0
+                        continue
+
+                    fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
+                    fmag = np.clip(fmag, 0.0, max_force_per_wheel)
+                    wheel_forces[name] = float(fmag)
+
+                    fvec = fmag * (n / norm)
+                    data.xfrc_applied[bid, :3] = fvec
+                    total_force += fvec
+
+                # Fixed actuation
+                for aid in ids["wheel_actuator_ids"]:
+                    data.ctrl[aid] = fixed_torque
+
+                mujoco.mj_step(model, data)
+
+                # Instability detection
+                if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():
+                    termination = "unstable"
+                    break
+
+                # Record per-step data for metrics
+                step_records.append({
                     "time": float(data.time),
-                    "qpos": data.qpos[:7].copy(),
-                    "qvel": data.qvel[:6].copy(),
-                    "total_force": total_force.copy(),
-                    "wheel_forces": wheel_forces,
+                    "base_pos": data.qpos[:3].copy(),
+                    "wheel_dists": list(wheel_dists),
                 })
 
-            total_force_accum += np.linalg.norm(total_force)
-            force_samples += 1
+                # Downsampled logging
+                if k % log_stride == 0 or k == n_steps - 1:
+                    trajectory.append({
+                        "time": float(data.time),
+                        "qpos": data.qpos[:7].copy(),
+                        "qvel": data.qvel[:6].copy(),
+                        "total_force": total_force.copy(),
+                        "wheel_forces": wheel_forces,
+                    })
 
-    except Exception:
-        termination = "unstable"
+                total_force_accum += np.linalg.norm(total_force)
+                force_samples += 1
 
-    summary = {
-        "final_base_position": data.qpos[:3].copy().tolist(),
-        "avg_total_magnetic_force": (
-            total_force_accum / max(1, force_samples)
-        ),
-    }
+        except Exception:
+            termination = "unstable"
 
-    return RolloutResult(
-        termination=termination,
-        steps=max(0, k + 1),
-        sim_time=float(data.time),
-        trajectory=trajectory,
-        summary=summary,
-        params_applied={
-            **params_applied,
-            "Br": Br,
-            "magnet_volume": magnet_volume,
-            "MU_0": MU_0,
-            "fixed_torque": fixed_torque,
-        },
-    )
+        # After simulation loop, compute metrics:
+        metrics_result = compute_metrics(step_records, metric_cfg)
 
+        summary = {
+            "final_base_position": data.qpos[:3].copy().tolist(),
+            "avg_total_magnetic_force": (
+                total_force_accum / max(1, force_samples)
+            ),
+            "reward": metrics_result["reward"],
+            "progress_m": metrics_result["progress_m"],
+            "progress_rate_mps": metrics_result["progress_rate_mps"],
+            "detached": metrics_result["detached"],
+            "stuck": metrics_result["stuck"],
+            "slip_m": metrics_result["slip_m"],
+        }
+
+        # Override termination reason if metrics detected a failure
+        if metrics_result["termination_reason"] != "ok":
+            termination = metrics_result["termination_reason"]
+
+        return RolloutResult(
+            termination=termination,
+            steps=max(0, k + 1),
+            sim_time=float(data.time),
+            trajectory=trajectory,
+            summary=summary,
+            params_applied={
+                **params_applied,
+                "Br": Br,
+                "magnet_volume": magnet_volume,
+                "MU_0": MU_0,
+                "fixed_torque": fixed_torque,
+            },
+        )
+    
+    finally:
+        # Clean up temporary XML files
+        try:
+            Path(temp_scene_file).unlink()
+            Path(patched_robot_file).unlink()
+            print(f"[CLEANUP] Removed {patched_robot_file}")
+        except Exception as e:
+            pass
+    
 
 # =============================================================================
 # SIMPLE HEADLESS TEST
