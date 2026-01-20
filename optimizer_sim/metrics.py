@@ -30,7 +30,8 @@ class MetricConfig:
     detach_duration_threshold: float = 4.0      # seconds
     stuck_window_duration: float = 2.0          # seconds
     stuck_progress_threshold: float = 0.005     # meters
-    
+    # just distance traveled and detach (overall contact time portion)
+    # simplier cost function
     # Progress direction (world frame axis)
     progress_axis: int = 2  # Z-axis for upward climbing
     
