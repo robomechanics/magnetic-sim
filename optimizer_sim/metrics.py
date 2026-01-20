@@ -28,7 +28,7 @@ class MetricConfig:
     bounce_tolerance: float = 1.0              # 1m - allow bouncing before considering detached
     detach_distance_threshold: float = 2.0      # meters (kept for legacy, now using bounce_tolerance)
     detach_duration_threshold: float = 4.0      # seconds
-    stuck_window_duration: float = 8.0          # seconds
+    stuck_window_duration: float = 2.0          # seconds
     stuck_progress_threshold: float = 0.005     # meters
     
     # Progress direction (world frame axis)
