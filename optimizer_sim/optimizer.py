@@ -74,30 +74,32 @@ def sample_params_prior(rng: np.random.Generator) -> Dict[str, Any]:
     Broad sampling of parameters you actually want to tune.
     Br is intentionally NOT included.
     """
-    timestep = float(rng.choice([0.0005, 0.001, 0.002]))
     o_solref = [rng.uniform(1e-4, 8e-4), rng.uniform(10.0, 50.0)]
     o_solimp = [0.99, 0.99, 0.001, 0.5, 2.0]
     
-    # NEW: Friction parameters (matching your milliquad ranges)
+    # Friction parameters (matching your milliquad ranges)
     wheel_friction = [
-        rng.uniform(0.01, 0.95),   # sliding
-        rng.uniform(0.001, 0.1),   # torsional
-        rng.uniform(0.001, 0.1),   # rolling
+        rng.uniform(0.90, 1.0),   # sliding
+        rng.uniform(0.05, 0.1),   # torsional
+        rng.uniform(0.05, 0.1),   # rolling
     ]
     
-    # NEW: Joint dynamics
-    wheel_damping = rng.uniform(0.01, 1.0)
+    # Joint dynamics
     rocker_stiffness = rng.uniform(10.0, 100.0)
     rocker_damping = rng.uniform(0.1, 5.0)
+    Br = rng.uniform(1.48 * 0.9, 1.48 * 1.1)
+    wheel_kp = rng.uniform(1.0, 50.0)     # Position gain
+    wheel_kv = rng.uniform(0.1, 10.0)     # Velocity gain (derivative)
 
     return {
-        "timestep": float(timestep),
+        "Br": float(Br),
         "o_solref": [float(o_solref[0]), float(o_solref[1])],
         "o_solimp": [float(x) for x in o_solimp],
         "wheel_friction": [float(x) for x in wheel_friction],
-        "wheel_damping": float(wheel_damping),
         "rocker_stiffness": float(rocker_stiffness),
         "rocker_damping": float(rocker_damping),
+        "wheel_kp": float(wheel_kp),      # ← ADD
+        "wheel_kv": float(wheel_kv),
     }
 
 
@@ -107,9 +109,7 @@ def sample_params_refined(
     mean: Dict[str, float],
     std: Dict[str, float],
 ) -> Dict[str, Any]:
-    """Adaptive sampling around elites (Gaussian) — Br is fixed (NOT optimized)."""
-    timestep = float(rng.choice([0.0005, 0.001, 0.002]))
-
+    """Adaptive sampling around elites (Gaussian)"""
     solref0 = rng.normal(mean["o_solref0"], std["o_solref0"])
     solref0 = _clip(solref0, 1e-4, 8e-4)
 
@@ -117,11 +117,28 @@ def sample_params_refined(
     solref1 = _clip(solref1, 10.0, 50.0)
 
     o_solimp = [0.99, 0.99, 0.001, 0.5, 2.0]
-
+    Br = rng.uniform(1.48 * 0.9, 1.48 * 1.1)
+    
+    # Sample other parameters uniformly (not adapted yet)
+    wheel_friction = [
+        rng.uniform(0.90, 1.0),   # sliding
+        rng.uniform(0.05, 0.1),   # torsional
+        rng.uniform(0.05, 0.1),   # rolling
+    ]
+    rocker_stiffness = rng.uniform(10.0, 100.0)
+    rocker_damping = rng.uniform(0.1, 5.0)
+    wheel_kp = rng.uniform(1.0, 50.0)
+    wheel_kv = rng.uniform(0.1, 10.0)
+    
     return {
-        "timestep": float(timestep),
+        "Br": float(Br),
         "o_solref": [float(solref0), float(solref1)],
         "o_solimp": [float(x) for x in o_solimp],
+        "wheel_friction": [float(x) for x in wheel_friction],
+        "rocker_stiffness": float(rocker_stiffness),
+        "rocker_damping": float(rocker_damping),
+        "wheel_kp": float(wheel_kp),
+        "wheel_kv": float(wheel_kv),
     }
 
 
@@ -211,6 +228,13 @@ def run_one_trial(trial_id: int, params: Dict[str, Any], cfg: OptimConfig) -> Di
         "slip_m": summary_hold.get("slip_m", 0.0),
         "detached_hold": summary_hold.get("detached", False),
         
+        # NEW: contact/detachment metrics from updated metrics.py
+        "contact_percentage_hold": summary_hold.get("contact_percentage", None),
+        "detachment_fraction_hold": summary_hold.get("detachment_fraction", None),
+
+        "contact_percentage_drive": summary_drive.get("contact_percentage", None),
+        "detachment_fraction_drive": summary_drive.get("detachment_fraction", None),
+
         # Drive mode results
         "termination_drive": termination_drive,
         "reward_drive": reward_drive,
@@ -255,16 +279,25 @@ def main(cfg: OptimConfig) -> None:
         "reward",
         "reward_hold",
         "reward_drive",
+
         "termination_hold",
         "termination_drive",
+
+        # HOLD (sideways)
         "slip_m",
+        "contact_percentage_hold",
+        "detachment_fraction_hold",
+        "detached_hold",
+
+        # DRIVE (drive_up)
         "progress_m",
         "progress_rate_mps",
-        "detached_hold",
+        "contact_percentage_drive",
+        "detachment_fraction_drive",
         "detached_drive",
         "stuck",
+
         "walltime_s",
-        "timestep",
     ]
 
     rng = np.random.default_rng(cfg.seed)
@@ -324,22 +357,32 @@ def main(cfg: OptimConfig) -> None:
             write_jsonl(jsonl_path, rec)
             
             csv_row = {
-                "trial_id": rec["trial_id"],
-                "reward": rec["reward"],
+                "trial_id": rec.get("trial_id", None),
+                "reward": rec.get("reward", None),
                 "reward_hold": rec.get("reward_hold", None),
                 "reward_drive": rec.get("reward_drive", None),
+
                 "termination_hold": rec.get("termination_hold", None),
                 "termination_drive": rec.get("termination_drive", None),
+
+                # HOLD
                 "slip_m": rec.get("slip_m", None),
+                "contact_percentage_hold": rec.get("contact_percentage_hold", None),
+                "detachment_fraction_hold": rec.get("detachment_fraction_hold", None),
+                "detached_hold": rec.get("detached_hold", None),
+
+                # DRIVE
                 "progress_m": rec.get("progress_m", None),
                 "progress_rate_mps": rec.get("progress_rate_mps", None),
-                "detached_hold": rec.get("detached_hold", None),
+                "contact_percentage_drive": rec.get("contact_percentage_drive", None),
+                "detachment_fraction_drive": rec.get("detachment_fraction_drive", None),
                 "detached_drive": rec.get("detached_drive", None),
                 "stuck": rec.get("stuck", None),
+
                 "walltime_s": rec.get("walltime_s", None),
-                "timestep": rec["params"].get("timestep", None),
             }
             append_csv_row(csv_path, csv_fields, csv_row)
+
             
             if rec["reward"] > best["reward"]:
                 best = {"reward": rec["reward"], "trial_id": rec["trial_id"], "params": rec["params"]}
@@ -367,13 +410,13 @@ def main(cfg: OptimConfig) -> None:
 # At end of optimizer.py
 if __name__ == "__main__":
     cfg = OptimConfig(
-        n_trials=300,
+        n_trials=30,
         seed=0,
         sim_duration=5.0,
         fixed_torque=0.5,
         rollout_mode="drive",
         mode="sideways",
-        n_workers=8,  # ← Change from 1 to 4 (or 8 if you have cores)
+        n_workers=10,  # ← Change from 1 to 10
         out_dir="logs",
         exp_name="stage3_run1",
     )
@@ -392,9 +435,26 @@ if __name__ == "__main__":
     print(f"\nBest trial: #{best['trial_id']}")
     print(f"Best reward: {best['reward']:.3f}")
     print("\nBest parameters:")
+    # Parameter descriptions
+    param_descriptions = {
+        "Br": "Magnetic remanence (Tesla)",
+        "o_solref": "Contact solver reference [timeconst, dampratio] - stiffness & damping",
+        "o_solimp": "Contact solver impedance [dmin, dmax, width, mid, power] - force ramp-up",
+        "wheel_friction": "Wheel friction [sliding, torsional, rolling]",
+        "rocker_stiffness": "Rocker joint stiffness (N·m/rad)",
+        "rocker_damping": "Rocker joint damping (N·m·s/rad)",
+        "wheel_kp": "Wheel position controller P gain",
+        "wheel_kv": "Wheel position controller D gain (velocity)",
+    }
+    
     for k, v in best['params'].items():
         if k not in ['mode', 'rollout_mode']:
-            print(f"  {k}: {v}")
+            desc = param_descriptions.get(k, "")
+            if desc:
+                print(f"  {k}: {v}")
+                print(f"      → {desc}")
+            else:
+                print(f"  {k}: {v}")
     
     # --- COMPARISON VIEWING ---
     response = input("\nPress ENTER to view BASELINE (original params) run, or 'n' to skip: ").strip().lower()

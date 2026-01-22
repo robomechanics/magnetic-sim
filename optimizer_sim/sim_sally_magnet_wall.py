@@ -48,6 +48,8 @@ DEFAULT_CONFIG = {
     "Br": 1.48,
     "magnet_volume": np.pi * ((0.025 / 2) ** 2 - (0.016 / 2) ** 2) * 0.025,
     "max_total_force": 200.0 * 4,
+    "target_wheel_speed_rad_s": 5.0,  # Desired wheel rotation speed (rad/s) ≈ 48 RPM
+
     "MU_0": 4 * np.pi * 1e-7,
 
     # Wall orientation (euler angles in radians: [roll, pitch, yaw])
@@ -287,14 +289,14 @@ def apply_params(
         apply_wall_rotation(model, params["wall_euler"], config["wall_body_name"])
     
     # Friction parameters (applied to wheel cylinder geoms)
-    if "wheel_friction" in params:
-        friction = params["wheel_friction"]  # [sliding, torsional, rolling]
-        wheel_cyl_names = ["BR_cyl", "FR_cyl", "BL_cyl", "FL_cyl"]
+    # if "wheel_friction" in params:
+    #     friction = params["wheel_friction"]  # [sliding, torsional, rolling]
+    #     wheel_cyl_names = ["BR_cyl", "FR_cyl", "BL_cyl", "FL_cyl"]
         
-        for name in wheel_cyl_names:
-            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
-            if gid >= 0:
-                model.geom_friction[gid, :] = np.array(friction, dtype=np.float64)
+    #     for name in wheel_cyl_names:
+    #         gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+    #         if gid >= 0:
+    #             model.geom_friction[gid, :] = np.array(friction, dtype=np.float64)
     
     # Joint damping parameters
     if "wheel_damping" in params:
@@ -318,14 +320,25 @@ def apply_params(
             if jid >= 0:
                 model.dof_damping[jid] = float(params["rocker_damping"])
 
+    if "wheel_kp" in params or "wheel_kv" in params:
+        wheel_actuator_names = ["BR_wheel_motor", "FR_wheel_motor", "BL_wheel_motor", "FL_wheel_motor"]
+        for name in wheel_actuator_names:
+            aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+            if aid >= 0:
+                if "wheel_kp" in params:
+                    model.actuator_gainprm[aid, 0] = float(params["wheel_kp"])
+                if "wheel_kv" in params:
+                    model.actuator_biasprm[aid, 2] = float(params["wheel_kv"])
     readback = {
         "timestep": float(model.opt.timestep),
         "o_solref": model.opt.o_solref.copy().tolist(),
         "o_solimp": model.opt.o_solimp.copy().tolist(),
-        "wheel_friction": params.get("wheel_friction", [0.95, 0.01, 0.01]),
+        # "wheel_friction": params.get("wheel_friction", [0.95, 0.01, 0.01]),
         "wheel_damping": params.get("wheel_damping", 0.1),
         "rocker_stiffness": params.get("rocker_stiffness", 30.0),
         "rocker_damping": params.get("rocker_damping", 1.0),
+        "wheel_kp": params.get("wheel_kp", 10.0),
+        "wheel_kv": params.get("wheel_kv", 1.0),
     }
     
     # Include wall_euler in readback if it was applied
@@ -510,12 +523,21 @@ def rollout(
                     total_force += fvec
 
                 # Fixed actuation
+                # for aid in ids["wheel_actuator_ids"]:
+                #     data.ctrl[aid] = fixed_torque
+                # Position control: set target wheel angle (increments continuously to spin)
+                target_speed = cfg.get("target_wheel_speed_rad_s", 5.0)
                 for aid in ids["wheel_actuator_ids"]:
-                    data.ctrl[aid] = fixed_torque
+                    data.ctrl[aid] = data.time * target_speed
 
                 mujoco.mj_step(model, data)
-
-                # Instability detection
+                if k % 500 == 0:  # Every 100 steps
+                    for name, aid in zip(ids["wheel_names"], ids["wheel_actuator_ids"]):
+                        joint_id = model.actuator_trnid[aid][0]
+                        qpos_addr = model.jnt_qposadr[joint_id]
+                        dof_adr = model.jnt_dofadr[joint_id]
+                        angle = data.qpos[qpos_addr]
+                        #print(f"  {name}: angle={angle:.2f} rad, vel={data.qvel[dof_adr]:.2f} rad/s")               # Instability detection
                 if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():
                     termination = "unstable"
                     break
@@ -529,18 +551,29 @@ def rollout(
 
                 # Downsampled logging
                 if k % log_stride == 0 or k == n_steps - 1:
+                    # Get wheel velocities
+                    wheel_vels = {}
+                    for name, aid in zip(ids["wheel_names"], ids["wheel_actuator_ids"]):
+                        joint_id = model.actuator_trnid[aid][0]
+                        dof_adr = model.jnt_dofadr[joint_id]
+                        wheel_vels[name] = float(data.qvel[dof_adr])
+                    
                     trajectory.append({
                         "time": float(data.time),
                         "qpos": data.qpos[:7].copy(),
                         "qvel": data.qvel[:6].copy(),
                         "total_force": total_force.copy(),
                         "wheel_forces": wheel_forces,
+                        "wheel_velocities": wheel_vels,
                     })
 
                 total_force_accum += np.linalg.norm(total_force)
                 force_samples += 1
 
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Simulation crashed: {e}")
+            import traceback
+            traceback.print_exc()
             termination = "unstable"
 
         # After simulation loop, compute metrics:
@@ -551,12 +584,20 @@ def rollout(
             "avg_total_magnetic_force": (
                 total_force_accum / max(1, force_samples)
             ),
+
+            # Primary scalar objective
             "reward": metrics_result["reward"],
+
+            # Existing metrics (kept for compatibility/logging)
             "progress_m": metrics_result["progress_m"],
             "progress_rate_mps": metrics_result["progress_rate_mps"],
             "detached": metrics_result["detached"],
             "stuck": metrics_result["stuck"],
             "slip_m": metrics_result["slip_m"],
+
+            # NEW: metrics supporting the new cost function
+            "contact_percentage": metrics_result.get("contact_percentage", None),
+            "detachment_fraction": metrics_result.get("detachment_fraction", None),
         }
 
         # Override termination reason if metrics detected a failure
@@ -574,7 +615,7 @@ def rollout(
                 "Br": Br,
                 "magnet_volume": magnet_volume,
                 "MU_0": MU_0,
-                "fixed_torque": fixed_torque,
+                "target_wheel_speed_rad_s": target_speed,
             },
         )
     
@@ -593,5 +634,7 @@ def rollout(
 # =============================================================================
 if __name__ == "__main__":
     result = rollout(sim_duration=2.0)
+    for rec in result.trajectory:
+        print(f"t={rec['time']:.2f}s: wheel vels = {rec['wheel_velocities']}")
     print("Termination:", result.termination)
     print("Summary:", result.summary)

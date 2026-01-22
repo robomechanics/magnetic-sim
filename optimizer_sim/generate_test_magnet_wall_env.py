@@ -16,12 +16,14 @@ WHEEL_OFFSET_X = 0.125   # (not used in patch, kept for compatibility)
 WHEEL_OFFSET_TILT = 0.01 # small tilt angle [rad]
 WALL_POS_X = 0.180       # (not used in patch)
 
-TORQUE_MAX = 3.0  # motor drive torque
+TORQUE_MAX = 10.0  # motor drive torque
 
-WHEEL_DAMPING_NEW = 0.1
+WHEEL_DAMPING_NEW = 1.0
 ROCKER_STIFFNESS_NEW = 30.0
 ROCKER_DAMPING_NEW = 1.0
 
+WHEEL_KP = float(os.environ.get("WHEEL_KP", "10.0"))
+WHEEL_KV = float(os.environ.get("WHEEL_KV", "1.0"))
 # +90 deg about Y for sideways turning
 SIDEWAYS_ROT = [0.7071068, 0.0, 0.7071068, 0.0]
 
@@ -178,25 +180,26 @@ def patch_wheel_orientation(root):
 # ---------- actuators ----------
 def patch_wheel_actuators(root):
     """
-    In the <actuator> block, set forcerange on wheel motors:
-      BR_wheel_motor, FR_wheel_motor, BL_wheel_motor, FL_wheel_motor
+    In the <actuator> block, set PD gains on wheel position actuators.
     """
     act_root = root.find("actuator")
     if act_root is None:
         print("[WARN] No <actuator> element found; skipping actuator patch.")
         return
 
-    motor_names = [
+    wheel_actuator_names = [
         "BR_wheel_motor",
         "FR_wheel_motor",
         "BL_wheel_motor",
         "FL_wheel_motor",
     ]
 
-    for motor in act_root.findall("motor"):
-        name = motor.get("name", "")
-        if name in motor_names:
-            motor.set("forcerange", f"{-TORQUE_MAX} {TORQUE_MAX}")
+    for actuator in act_root.findall("position"):
+        name = actuator.get("name", "")
+        if name in wheel_actuator_names:
+            actuator.set("kp", str(WHEEL_KP))
+            actuator.set("kv", str(WHEEL_KV))
+            print(f"[INFO] Wheel actuator '{name}': kp={WHEEL_KP}, kv={WHEEL_KV}")
 
 
 def patch_joint_dynamics(root):
@@ -219,7 +222,7 @@ def patch_joint_dynamics(root):
     for joint in root.iter("joint"):
         name = joint.get("name", "")
 
-        # Wheels: increase damping
+        # # Wheels: increase damping
         if name in wheel_joint_names:
             old_damping = joint.get("damping", "0")
             joint.set("damping", str(WHEEL_DAMPING_NEW))
