@@ -38,7 +38,7 @@
     <!-- ======== END ADDED BLOCK B ======== -->
 
     <!-- Link frame -->
-    <body name="frame" pos="0.035 0 0.35" quat="0 -0.7071 0 0.7071">
+    <body name="frame" pos="0.24 0 0.35" quat="0 -0.7071 0 0.7071">
 
       <freejoint/>
       <!-- Part frame -->
