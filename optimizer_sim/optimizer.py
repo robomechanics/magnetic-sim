@@ -43,7 +43,7 @@ class OptimConfig:
     # Optimization settings
     n_trials: int = 300
     seed: int = 0
-    n_workers: int = 10  # Parallel workers (>1 for parallelism)
+    n_workers: int = 10 # Parallel workers (>1 for parallelism)
     
     # Rollout settings
     sim_duration: float = 5.0
@@ -63,38 +63,134 @@ class OptimConfig:
 # =============================================================================
 # PARAMETER SAMPLING
 # =============================================================================
+PARAM_RANGES = {
+    "Br": (1.48 * 0.9, 1.48 * 1.1),
+    "o_solref_0": (1e-4, 8e-4),
+    "o_solref_1": (10.0, 50.0),
+    "o_solimp": [0.99, 0.99, 0.001, 0.5, 2.0],  # Fixed
+    "wheel_friction_slide": (0.9, 1.0),
+    "wheel_friction_torsion": (0.05, 0.1),
+    "wheel_friction_roll": (0.05, 0.1),
+    "rocker_stiffness": (10.0, 100.0),
+    "rocker_damping": (0.1, 5.0),
+    "wheel_kp": (1.0, 50.0),
+    "wheel_kv": (0.1, 10.0),
+    "max_magnetic_distance": (0.005, 0.1), # Max should not be too low, 0.1 is safe.
+}
 
 def _clip(x: float, lo: float, hi: float) -> float:
     """Clip value to range [lo, hi]."""
     return float(min(max(x, lo), hi))
 
-
-def sample_params_prior(rng: np.random.Generator) -> Dict[str, Any]:
+def smart_uniform(rng: np.random.Generator, low: float, high: float) -> float:
     """
-    Sample parameters uniformly from prior ranges.
-    Used for initial exploration.
+    Smart sampling: use log scale if range spans >10x, otherwise linear.
     
     Args:
         rng: Random number generator
+        low: Lower bound
+        high: Upper bound
         
     Returns:
-        Dictionary of sampled parameters
+        Sampled value
     """
-    o_solref = [rng.uniform(1e-4, 8e-4), rng.uniform(10.0, 50.0)]
-    o_solimp = [0.99, 0.99, 0.001, 0.5, 2.0]  # Fixed
+    if low <= 0:
+        raise ValueError(f"Low bound must be positive for smart sampling, got {low}")
     
+    range_ratio = high / low
+    
+    if range_ratio >= 10.0:
+        # Log scale: range spans order of magnitude
+        return float(10 ** rng.uniform(np.log10(low), np.log10(high)))
+    else:
+        # Linear scale: range is narrow
+        return float(rng.uniform(low, high))
+
+def get_sampling_method(low: float, high: float) -> str:
+    """Determine if parameter uses linear or log sampling."""
+    if low <= 0:
+        return "Linear"
+    return "LOG" if (high / low) >= 10.0 else "Linear"
+
+def format_range(param_name: str) -> str:
+    """Format parameter range as string."""
+    if param_name == "o_solimp":
+        vals = PARAM_RANGES["o_solimp"]
+        return "[" + ", ".join(str(v) for v in vals) + "]"
+    elif param_name == "o_solref":
+        val0 = PARAM_RANGES["o_solref_0"]
+        val1 = PARAM_RANGES["o_solref_1"]
+        
+        # Handle tuples or fixed values
+        if isinstance(val0, tuple):
+            low0, high0 = val0
+            range0 = f"{low0}-{high0}"
+        else:
+            range0 = str(val0)
+            
+        if isinstance(val1, tuple):
+            low1, high1 = val1
+            range1 = f"{low1}-{high1}"
+        else:
+            range1 = str(val1)
+            
+        return f"[{range0}, {range1}]"
+    elif param_name == "wheel_friction":
+        vals = []
+        for key in ["wheel_friction_slide", "wheel_friction_torsion", "wheel_friction_roll"]:
+            val = PARAM_RANGES[key]
+            if isinstance(val, tuple) and len(val) == 2:
+                low, high = val
+                vals.append(f"{low}-{high}")
+            else:
+                vals.append(str(val))
+        return f"[{', '.join(vals)}]"
+    elif param_name in PARAM_RANGES:
+        val = PARAM_RANGES[param_name]
+        if isinstance(val, tuple) and len(val) == 2:
+            low, high = val
+            return f"{low} - {high}"
+        else:
+            return str(val)
+    else:
+        return "Unknown"
+
+def sample_params_prior(rng: np.random.Generator) -> Dict[str, Any]:
+    """Sample parameters uniformly from prior ranges."""
+    
+    # Helper to sample or return fixed value
+    def sample_or_fixed(key):
+        val = PARAM_RANGES[key]
+        if isinstance(val, tuple) and len(val) == 2:
+            return smart_uniform(rng, val[0], val[1])
+        else:
+            return val
+    
+    # Solver parameters
+    o_solref = [
+        sample_or_fixed("o_solref_0"),
+        sample_or_fixed("o_solref_1"),
+    ]
+    o_solimp = PARAM_RANGES["o_solimp"]
+    
+    # Friction parameters
     wheel_friction = [
-        rng.uniform(0.90, 1.0),   # Sliding
-        rng.uniform(0.05, 0.1),   # Torsional
-        rng.uniform(0.05, 0.1),   # Rolling
+        sample_or_fixed("wheel_friction_slide"),
+        sample_or_fixed("wheel_friction_torsion"),
+        sample_or_fixed("wheel_friction_roll"),
     ]
     
-    rocker_stiffness = rng.uniform(10.0, 100.0)
-    rocker_damping = rng.uniform(0.1, 5.0)
-    Br = rng.uniform(1.48 * 0.9, 1.48 * 1.1)
-    wheel_kp = rng.uniform(1.0, 50.0)
-    wheel_kv = rng.uniform(0.1, 10.0)
-    max_magnetic_distance = rng.uniform(0.005, 0.1)
+    # Joint dynamics
+    rocker_stiffness = sample_or_fixed("rocker_stiffness")
+    rocker_damping = sample_or_fixed("rocker_damping")
+    
+    # Magnetic parameters
+    Br = sample_or_fixed("Br")
+    max_magnetic_distance = sample_or_fixed("max_magnetic_distance")
+    
+    # Control gains
+    wheel_kp = sample_or_fixed("wheel_kp")
+    wheel_kv = sample_or_fixed("wheel_kv")
     
     return {
         "Br": float(Br),
@@ -116,9 +212,7 @@ def sample_params_refined(
 ) -> Dict[str, Any]:
     """
     Sample parameters using Gaussian around elite mean.
-    Used after initial exploration to refine promising regions.
-    
-    Currently only adapts o_solref; other params still sampled uniformly.
+    Uses sample_or_fixed for non-adapted parameters.
     
     Args:
         rng: Random number generator
@@ -128,28 +222,36 @@ def sample_params_refined(
     Returns:
         Dictionary of sampled parameters
     """
-    # Adaptive sampling for o_solref
+    # Helper to sample or return fixed value
+    def sample_or_fixed(key):
+        val = PARAM_RANGES[key]
+        if isinstance(val, tuple) and len(val) == 2:
+            return smart_uniform(rng, val[0], val[1])
+        else:
+            return val
+    
+    # Adaptive sampling for o_solref (Gaussian around elites)
     solref0 = rng.normal(mean["o_solref0"], std["o_solref0"])
-    solref0 = _clip(solref0, 1e-4, 8e-4)
+    solref0 = _clip(solref0, *PARAM_RANGES["o_solref_0"])
     
     solref1 = rng.normal(mean["o_solref1"], std["o_solref1"])
-    solref1 = _clip(solref1, 10.0, 50.0)
+    solref1 = _clip(solref1, *PARAM_RANGES["o_solref_1"])
     
-    # Other parameters: uniform sampling (could be extended to adaptive)
-    o_solimp = [0.99, 0.99, 0.001, 0.5, 2.0]
-    Br = rng.uniform(1.48 * 0.9, 1.48 * 1.1)
+    # Other parameters: use sample_or_fixed
+    o_solimp = PARAM_RANGES["o_solimp"]
+    Br = sample_or_fixed("Br")
     
     wheel_friction = [
-        rng.uniform(0.90, 1.0),
-        rng.uniform(0.05, 0.1),
-        rng.uniform(0.05, 0.1),
+        sample_or_fixed("wheel_friction_slide"),
+        sample_or_fixed("wheel_friction_torsion"),
+        sample_or_fixed("wheel_friction_roll"),
     ]
     
-    rocker_stiffness = rng.uniform(10.0, 100.0)
-    rocker_damping = rng.uniform(0.1, 5.0)
-    wheel_kp = rng.uniform(1.0, 50.0)
-    wheel_kv = rng.uniform(0.1, 10.0)
-    max_magnetic_distance = rng.uniform(0.005, 0.02)
+    rocker_stiffness = sample_or_fixed("rocker_stiffness")
+    rocker_damping = sample_or_fixed("rocker_damping")
+    wheel_kp = sample_or_fixed("wheel_kp")
+    wheel_kv = sample_or_fixed("wheel_kv")
+    max_magnetic_distance = sample_or_fixed("max_magnetic_distance")
     
     return {
         "Br": float(Br),
@@ -312,29 +414,49 @@ def print_parameter_info():
     print("="*80)
     
     params_info = [
-        ("Br", "Magnetic remanence", "Linear", "1.332 - 1.628 T", "±10% of 1.48 T"),
-        ("o_solref[0]", "Contact timeconst", "Linear", "0.0001 - 0.0008 s", "Solver stiffness"),
-        ("o_solref[1]", "Contact dampratio", "Linear", "10.0 - 50.0", "Solver damping"),
-        ("o_solimp", "Contact impedance", "Fixed", "[0.99, 0.99, 0.001, 0.5, 2]", "Force ramp-up"),
-        ("wheel_friction[0]", "Sliding friction", "Linear", "0.90 - 1.00", "Tangential slip"),
-        ("wheel_friction[1]", "Torsional friction", "Linear", "0.05 - 0.10", "Spinning resistance"),
-        ("wheel_friction[2]", "Rolling friction", "Linear", "0.05 - 0.10", "Rolling resistance"),
-        ("rocker_stiffness", "Rocker joint stiffness", "Linear", "10.0 - 100.0 N·m/rad", "Suspension compliance"),
-        ("rocker_damping", "Rocker joint damping", "Linear", "0.1 - 5.0 N·m·s/rad", "Suspension damping"),
-        ("wheel_kp", "Wheel position gain", "Linear", "1.0 - 50.0", "P controller gain"),
-        ("wheel_kv", "Wheel velocity gain", "Linear", "0.1 - 10.0", "D controller gain"),
-        ("max_magnetic_distance", "Magnetic cutoff", "Linear", "0.005 - 0.02 m", "0.5cm - 2cm range"),
+        ("Br", "Magnetic remanence", "Br", "±10% of 1.48 T"),
+        ("o_solref[0]", "Contact timeconst", "o_solref_0", "Solver stiffness"),
+        ("o_solref[1]", "Contact dampratio", "o_solref_1", "Solver damping"),
+        ("o_solimp", "Contact impedance", "o_solimp", "Force ramp-up"),
+        ("wheel_friction[0]", "Sliding friction", "wheel_friction_slide", "Tangential slip"),
+        ("wheel_friction[1]", "Torsional friction", "wheel_friction_torsion", "Spinning resistance"),
+        ("wheel_friction[2]", "Rolling friction", "wheel_friction_roll", "Rolling resistance"),
+        ("rocker_stiffness", "Rocker joint stiffness", "rocker_stiffness", "Suspension compliance"),
+        ("rocker_damping", "Rocker joint damping", "rocker_damping", "Suspension damping"),
+        ("wheel_kp", "Wheel position gain", "wheel_kp", "P controller gain"),
+        ("wheel_kv", "Wheel velocity gain", "wheel_kv", "D controller gain"),
+        ("max_magnetic_distance", "Magnetic cutoff", "max_magnetic_distance", "0.5cm - 2cm range"),
     ]
     
-    print(f"{'Parameter':<25} {'Sampling':<10} {'Range':<30} {'Description':<30}")
-    print("-"*105)
-    for name, desc, sampling, range_str, notes in params_info:
-        print(f"{name:<25} {sampling:<10} {range_str:<30} {notes:<30}")
+    print(f"{'Parameter':<25} {'Sampling':<10} {'Range':<35} {'Description':<30}")
+    print("-"*110)
     
-    print("="*105)
-    print(f"Total tunable parameters: 11 (o_solimp is fixed)")
-    print(f"Search space dimensionality: 13 (counting vector elements)")
-    print("="*105 + "\n")
+    for display_name, desc, param_key, notes in params_info:
+        value = PARAM_RANGES.get(param_key)
+        
+        if value is None:
+            # Parameter not in PARAM_RANGES, skip
+            continue
+        elif isinstance(value, list):
+            # Fixed list (like o_solimp)
+            sampling = "Fixed"
+            range_str = str(value)
+        elif isinstance(value, tuple) and len(value) == 2:
+            # Tunable range
+            low, high = value
+            sampling = get_sampling_method(low, high)
+            range_str = f"{low} - {high}"
+        else:
+            # Fixed single value
+            sampling = "Fixed"
+            range_str = str(value)
+        
+        print(f"{display_name:<25} {sampling:<10} {range_str:<35} {notes:<30}")
+    
+    print("="*110)
+    print(f"Total tunable parameters: 9 (3 fixed)")
+    print(f"Search space dimensionality: 11 (counting vector elements)")
+    print("="*110 + "\n")
 
 
 def print_results(best: Dict[str, Any]):
@@ -348,21 +470,21 @@ def print_results(best: Dict[str, Any]):
     print("\nOPTIMIZED PARAMETERS")
     print("="*110)
     
-    # Parameter info with search bounds
+    # Parameter info with search bounds - now generated from PARAM_RANGES
     params_info = {
-        "Br": ("Magnetic remanence (T)", "1.332 - 1.628"),
-        "o_solref": ("Contact solver [timeconst, dampratio]", "[0.0001-0.0008, 10-50]"),
+        "Br": ("Magnetic remanence (T)", format_range("Br")),
+        "o_solref": ("Contact solver [timeconst, dampratio]", format_range("o_solref")),
         "o_solimp": ("Contact impedance", "Fixed"),
-        "wheel_friction": ("Wheel friction [slide, torsion, roll]", "[0.9-1.0, 0.05-0.1, 0.05-0.1]"),
-        "rocker_stiffness": ("Rocker stiffness (N·m/rad)", "10.0 - 100.0"),
-        "rocker_damping": ("Rocker damping (N·m·s/rad)", "0.1 - 5.0"),
-        "wheel_kp": ("Wheel P gain", "1.0 - 50.0"),
-        "wheel_kv": ("Wheel D gain", "0.1 - 10.0"),
-        "max_magnetic_distance": ("Magnetic cutoff (m)", "0.005 - 0.02"),
+        "wheel_friction": ("Wheel friction [slide, torsion, roll]", format_range("wheel_friction")),
+        "rocker_stiffness": ("Rocker stiffness (N·m/rad)", format_range("rocker_stiffness")),
+        "rocker_damping": ("Rocker damping (N·m·s/rad)", format_range("rocker_damping")),
+        "wheel_kp": ("Wheel P gain", format_range("wheel_kp")),
+        "wheel_kv": ("Wheel D gain", format_range("wheel_kv")),
+        "max_magnetic_distance": ("Magnetic cutoff (m)", format_range("max_magnetic_distance")),
     }
     
-    print(f"{'Parameter':<25} {'Optimized Value':<30} {'Search Range':<25} {'Description':<30}")
-    print("-"*110)
+    print(f"{'Parameter':<25} {'Optimized Value':<30} {'Search Range':<30} {'Description':<30}")
+    print("-"*115)
     
     for k, v in best['params'].items():
         if k not in ['mode', 'rollout_mode']:
@@ -376,11 +498,11 @@ def print_results(best: Dict[str, Any]):
                 else:
                     val_str = str(v)
                 
-                print(f"{k:<25} {val_str:<30} {search_range:<25} {desc:<30}")
+                print(f"{k:<25} {val_str:<30} {search_range:<30} {desc:<30}")
             else:
                 print(f"{k:<25} {str(v):<30}")
     
-    print("="*110 + "\n")
+    print("="*115 + "\n")
 
 
 # =============================================================================

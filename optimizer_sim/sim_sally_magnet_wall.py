@@ -296,6 +296,21 @@ def apply_params(
     if "wall_euler" in params:
         apply_wall_rotation(model, params["wall_euler"], config["wall_body_name"])
     
+    # Apply wheel friction
+    if "wheel_friction" in params:
+        friction = params["wheel_friction"]
+        
+        # Apply to wheels
+        wheel_cyl_names = ["BR_cyl", "FR_cyl", "BL_cyl", "FL_cyl"]
+        for name in wheel_cyl_names:
+            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+            if gid >= 0:
+                model.geom_friction[gid, :] = np.array(friction, dtype=np.float64)
+        
+        # ALSO apply to wall
+        wall_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, config["wall_geom_name"])
+        if wall_id >= 0:
+            model.geom_friction[wall_id, :] = np.array(friction, dtype=np.float64)
     # Rocker joint stiffness
     if "rocker_stiffness" in params:
         rocker_joints = ["left_hinge", "right_hinge", "BR_pivot", "FR_pivot", "BL_pivot", "FL_pivot"]
@@ -328,6 +343,7 @@ def apply_params(
         "timestep": float(model.opt.timestep),
         "o_solref": model.opt.o_solref.copy().tolist(),
         "o_solimp": model.opt.o_solimp.copy().tolist(),
+        "wheel_friction": params.get("wheel_friction", [0.95, 0.0005, 0.0001]),
         "rocker_stiffness": params.get("rocker_stiffness", 30.0),
         "rocker_damping": params.get("rocker_damping", 1.0),
         "wheel_kp": params.get("wheel_kp", 10.0),
