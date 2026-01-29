@@ -102,7 +102,7 @@ def _compute_contact_percentage(step_records: List[Dict[str, Any]]) -> float:
     
     contact_percentage = contact_steps / max(total_steps, 1)
     
-    print(f"[METRICS] Contact: {contact_steps}/{total_steps} steps ({contact_percentage*100:.1f}%)")
+    # print(f"[METRICS] Contact: {contact_steps}/{total_steps} steps ({contact_percentage*100:.1f}%)")
     
     return float(contact_percentage)
 
@@ -121,7 +121,7 @@ def compute_metrics_drive(
     Objective: Maximize upward progress while staying attached.
     
     Formula:
-        progress = end_z - start_z
+        progress = max(0, end_z - start_z)  # Only count upward movement
         cost = w_detach * detachment_fraction - w_progress * (progress / scale)
         reward = -cost
     
@@ -144,7 +144,11 @@ def compute_metrics_drive(
     # Measure progress along climbing axis (start to end only)
     start_pos = float(positions[0, config.progress_axis])
     end_pos = float(positions[-1, config.progress_axis])
-    total_progress = float(end_pos - start_pos)
+    total_progress_raw = float(end_pos - start_pos)
+    
+    # ✅ FIX: Only count positive progress (upward movement)
+    # If robot slipped down, treat it as zero progress (not negative reward)
+    total_progress = float(max(0.0, total_progress_raw))
     
     # Progress rate (for logging only, not used in reward)
     times = np.array([rec["time"] for rec in step_records], dtype=float)
@@ -168,7 +172,8 @@ def compute_metrics_drive(
     
     return {
         "reward": reward,
-        "progress_m": float(total_progress),
+        "progress_m": float(total_progress),  # Returns clamped value
+        "progress_m_raw": float(total_progress_raw),  # NEW: Track actual displacement
         "progress_rate_mps": float(progress_rate),
         "detached": bool(detached),
         "stuck": False,  # Legacy field

@@ -145,7 +145,7 @@ def patch_wheel_geom_body(body_elem):
 # ---------- orientation / sideways mode ----------
 def patch_wheel_orientation(root):
     if MODE != "sideways":
-        print("[INFO] drive_up mode, no orientation patch.")
+        #print("[INFO] drive_up mode, no orientation patch.")
         return
 
     # +90° rotation about Z (yaw)
@@ -168,12 +168,12 @@ def patch_wheel_orientation(root):
         q_old = [float(v) for v in body.get("quat", "1 0 0 0").split()]
 
         if rot is None:
-            print(f"[KEEP] {name}: {q_old}")
+            #print(f"[KEEP] {name}: {q_old}")
             continue
 
         q_new = quat_mul(q_old, rot)
         body.set("quat", " ".join(f"{v:.6f}" for v in q_new))
-        print(f"[ROTATE] {name}: {q_old} → {q_new}")
+        #print(f"[ROTATE] {name}: {q_old} → {q_new}")
 
 
 
@@ -199,7 +199,7 @@ def patch_wheel_actuators(root):
         if name in wheel_actuator_names:
             actuator.set("kp", str(WHEEL_KP))
             actuator.set("kv", str(WHEEL_KV))
-            print(f"[INFO] Wheel actuator '{name}': kp={WHEEL_KP}, kv={WHEEL_KV}")
+            #print(f"[INFO] Wheel actuator '{name}': kp={WHEEL_KP}, kv={WHEEL_KV}")
 
 
 def patch_joint_dynamics(root):
@@ -226,7 +226,7 @@ def patch_joint_dynamics(root):
         if name in wheel_joint_names:
             old_damping = joint.get("damping", "0")
             joint.set("damping", str(WHEEL_DAMPING_NEW))
-            print(f"[INFO] Wheel joint '{name}': damping {old_damping} → {WHEEL_DAMPING_NEW}")
+            #print(f"[INFO] Wheel joint '{name}': damping {old_damping} → {WHEEL_DAMPING_NEW}")
 
         # Rockers: set stiffness & damping
         if name in rocker_joint_names:
@@ -236,11 +236,11 @@ def patch_joint_dynamics(root):
             joint.set("stiffness", str(ROCKER_STIFFNESS_NEW))
             joint.set("damping", str(ROCKER_DAMPING_NEW))
 
-            print(
-                f"[INFO] Rocker joint '{name}': "
-                f"stiffness {old_k} → {ROCKER_STIFFNESS_NEW}, "
-                f"damping {old_c} → {ROCKER_DAMPING_NEW}"
-            )
+            # print(
+            #     f"[INFO] Rocker joint '{name}': "
+            #     f"stiffness {old_k} → {ROCKER_STIFFNESS_NEW}, "
+            #     f"damping {old_c} → {ROCKER_DAMPING_NEW}"
+            # )
 
 
 def insert_wheel_geom_body(linkage_body, wheel_name):
@@ -286,8 +286,8 @@ def launch_simulation():
 # ===========================
 # Main patch routine
 # ===========================
-print(f"[INFO] Loading {INPUT_FILE} ...")
-print(f"[DEBUG] MODE from environment: {MODE}")  # ← ADD THIS LINE
+# print(f"[INFO] Loading {INPUT_FILE} ...")
+# print(f"[DEBUG] MODE from environment: {MODE}")  # ← ADD THIS LINE
 tree = ET.parse(INPUT_FILE)
 root = tree.getroot()
 remove_self_includes(root)
@@ -296,7 +296,7 @@ remove_self_includes(root)
 patch_wheel_orientation(root)
 
 # 2) Ensure wheel geom bodies exist, then patch their sampling spheres + cylinder sizes
-print("[INFO] Inserting wheel cylinder bodies if missing...")
+# print("[INFO] Inserting wheel cylinder bodies if missing...")
 
 # Map wheel → linkage body name in robot_sally.xml
 WHEEL_LINKAGE_MAP = {
@@ -330,16 +330,16 @@ for wheel, linkage_name in WHEEL_LINKAGE_MAP.items():
             break
 
     if existing is None:
-        print(f"[ADD] Creating missing wheel geom body '{geom_name}' under '{linkage_name}'")
+        # print(f"[ADD] Creating missing wheel geom body '{geom_name}' under '{linkage_name}'")
         new_body = insert_wheel_geom_body(linkage_body, wheel)
         geom_body_map[geom_name] = new_body
     else:
-        print(f"[FOUND] Existing wheel geom '{geom_name}' under '{linkage_name}'")
+        # print(f"[FOUND] Existing wheel geom '{geom_name}' under '{linkage_name}'")
         geom_body_map[geom_name] = existing
 
 # 2.3 Patch sampling spheres & cylinder size on each wheel_geom
 for name, body in geom_body_map.items():
-    print(f"[INFO] Patching sampling spheres and cylinder on '{name}'")
+    # print(f"[INFO] Patching sampling spheres and cylinder on '{name}'")
     patch_wheel_geom_body(body)
 
 # 3) Patch wheel actuators' torque limits
@@ -352,15 +352,15 @@ patch_joint_dynamics(root)
 ET.indent(tree, space="  ")
 tree.write(OUTPUT_FILE, encoding="utf-8", xml_declaration=True)
 
-print(f"✅ Patched XML written to {OUTPUT_FILE}")
-print(f"   MODE={MODE}")
-print(f"   RADIUS={RADIUS}, HALF_HEIGHT={HALF_HEIGHT}")
-print(f"   RING_RADIUS={RING_RADIUS}, EMBED_Z={EMBED_Z}, N_PER_RING={N_PER_RING}")
-print(f"   TORQUE_MAX={TORQUE_MAX}")
-print(f"   DEBUG_VISIBLE={DEBUG_VISIBLE}, POINT_SIZE={POINT_SIZE}")
-for body in root.iter("body"):
-    if body.get("name") in ["rocker_linkage", "rocker_linkage_2", "rocker_linkage_3", "rocker_linkage_4"]:
-        print(body.get("name"), body.get("quat"))
+# print(f"✅ Patched XML written to {OUTPUT_FILE}")
+# print(f"   MODE={MODE}")
+# print(f"   RADIUS={RADIUS}, HALF_HEIGHT={HALF_HEIGHT}")
+# print(f"   RING_RADIUS={RING_RADIUS}, EMBED_Z={EMBED_Z}, N_PER_RING={N_PER_RING}")
+# print(f"   TORQUE_MAX={TORQUE_MAX}")
+# print(f"   DEBUG_VISIBLE={DEBUG_VISIBLE}, POINT_SIZE={POINT_SIZE}")
+# for body in root.iter("body"):
+#     if body.get("name") in ["rocker_linkage", "rocker_linkage_2", "rocker_linkage_3", "rocker_linkage_4"]:
+#         print(body.get("name"), body.get("quat"))
 
 # === Auto-launch simulation (only when run manually) ===
 if __name__ == "__main__" and os.environ.get("NO_AUTOLAUNCH", "0") != "1":

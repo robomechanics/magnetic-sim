@@ -1,13 +1,13 @@
 {
-  "trial_id": 192,
-  "reward": -0.04318338624960033,
+  "trial_id": 238,
+  "reward": -233.19999999999996,
   "reward_hold": null,
   "reward_drive": null,
   "parameters": {
-    "Br": 1.3972609303850736,
+    "Br": 1.5270122286142627,
     "o_solref": [
-      0.0004573905023869394,
-      27.8268392955011
+      0.00037142717594388584,
+      37.49129805430139
     ],
     "o_solimp": [
       0.99,
@@ -17,15 +17,15 @@
       2.0
     ],
     "wheel_friction": [
-      0.9654802642720854,
-      0.06529304330946155,
-      0.09984114580420708
+      0.9532388660512062,
+      0.05620329021096932,
+      0.07269549460923755
     ],
-    "rocker_stiffness": 12.849689172616326,
-    "rocker_damping": 0.9083038812761974,
-    "wheel_kp": 2.0505827248958894,
-    "wheel_kv": 0.38983747626486775,
-    "max_magnetic_distance": 0.0658151360792787,
+    "rocker_stiffness": 10.0,
+    "rocker_damping": 0.820067341706922,
+    "wheel_kp": 3.905946613192053,
+    "wheel_kv": 10.0,
+    "max_magnetic_distance": 0.05385042851443615,
     "mode": "sideways",
     "rollout_mode": "drive"
   },
@@ -34,6 +34,6 @@
     "settle_time": 1.0,
     "fixed_torque": 0.5
   },
-  "timestamp": "2026-01-27 00:20:16",
+  "timestamp": "2026-01-29 00:39:27",
   "experiment_name": "stage3"
 }

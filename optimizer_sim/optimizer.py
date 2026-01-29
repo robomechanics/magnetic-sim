@@ -212,7 +212,7 @@ def sample_params_refined(
 ) -> Dict[str, Any]:
     """
     Sample parameters using Gaussian around elite mean.
-    Uses sample_or_fixed for non-adapted parameters.
+    Now ALL tunable parameters use adaptive sampling.
     
     Args:
         rng: Random number generator
@@ -222,36 +222,48 @@ def sample_params_refined(
     Returns:
         Dictionary of sampled parameters
     """
-    # Helper to sample or return fixed value
-    def sample_or_fixed(key):
-        val = PARAM_RANGES[key]
-        if isinstance(val, tuple) and len(val) == 2:
-            return smart_uniform(rng, val[0], val[1])
-        else:
-            return val
+    # Adaptive Gaussian sampling for ALL tunable parameters
+    Br = rng.normal(mean["Br"], std["Br"])
+    Br = _clip(Br, *PARAM_RANGES["Br"])
     
-    # Adaptive sampling for o_solref (Gaussian around elites)
     solref0 = rng.normal(mean["o_solref0"], std["o_solref0"])
     solref0 = _clip(solref0, *PARAM_RANGES["o_solref_0"])
     
     solref1 = rng.normal(mean["o_solref1"], std["o_solref1"])
     solref1 = _clip(solref1, *PARAM_RANGES["o_solref_1"])
     
-    # Other parameters: use sample_or_fixed
+    # Friction components (each sampled independently)
+    wheel_friction_slide = rng.normal(mean["wheel_friction_slide"], std["wheel_friction_slide"])
+    wheel_friction_slide = _clip(wheel_friction_slide, *PARAM_RANGES["wheel_friction_slide"])
+    
+    wheel_friction_torsion = rng.normal(mean["wheel_friction_torsion"], std["wheel_friction_torsion"])
+    wheel_friction_torsion = _clip(wheel_friction_torsion, *PARAM_RANGES["wheel_friction_torsion"])
+    
+    wheel_friction_roll = rng.normal(mean["wheel_friction_roll"], std["wheel_friction_roll"])
+    wheel_friction_roll = _clip(wheel_friction_roll, *PARAM_RANGES["wheel_friction_roll"])
+    
+    wheel_friction = [wheel_friction_slide, wheel_friction_torsion, wheel_friction_roll]
+    
+    # Joint dynamics
+    rocker_stiffness = rng.normal(mean["rocker_stiffness"], std["rocker_stiffness"])
+    rocker_stiffness = _clip(rocker_stiffness, *PARAM_RANGES["rocker_stiffness"])
+    
+    rocker_damping = rng.normal(mean["rocker_damping"], std["rocker_damping"])
+    rocker_damping = _clip(rocker_damping, *PARAM_RANGES["rocker_damping"])
+    
+    # Control gains
+    wheel_kp = rng.normal(mean["wheel_kp"], std["wheel_kp"])
+    wheel_kp = _clip(wheel_kp, *PARAM_RANGES["wheel_kp"])
+    
+    wheel_kv = rng.normal(mean["wheel_kv"], std["wheel_kv"])
+    wheel_kv = _clip(wheel_kv, *PARAM_RANGES["wheel_kv"])
+    
+    # Magnetic parameters
+    max_magnetic_distance = rng.normal(mean["max_magnetic_distance"], std["max_magnetic_distance"])
+    max_magnetic_distance = _clip(max_magnetic_distance, *PARAM_RANGES["max_magnetic_distance"])
+    
+    # Fixed parameter (not tuned)
     o_solimp = PARAM_RANGES["o_solimp"]
-    Br = sample_or_fixed("Br")
-    
-    wheel_friction = [
-        sample_or_fixed("wheel_friction_slide"),
-        sample_or_fixed("wheel_friction_torsion"),
-        sample_or_fixed("wheel_friction_roll"),
-    ]
-    
-    rocker_stiffness = sample_or_fixed("rocker_stiffness")
-    rocker_damping = sample_or_fixed("rocker_damping")
-    wheel_kp = sample_or_fixed("wheel_kp")
-    wheel_kv = sample_or_fixed("wheel_kv")
-    max_magnetic_distance = sample_or_fixed("max_magnetic_distance")
     
     return {
         "Br": float(Br),
@@ -269,24 +281,61 @@ def sample_params_refined(
 def compute_elite_stats(elites: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Compute mean and std of elite samples for adaptive sampling.
+    Now computes statistics for ALL tunable parameters.
     
     Args:
         elites: List of elite trial records
         
     Returns:
-        (mean, std) dictionaries for o_solref parameters
+        (mean, std) dictionaries for all parameters
     """
-    s0 = np.array([e["params"]["o_solref"][0] for e in elites], dtype=float)
-    s1 = np.array([e["params"]["o_solref"][1] for e in elites], dtype=float)
+    # Extract parameter arrays from elites
+    Br_vals = np.array([e["params"]["Br"] for e in elites], dtype=float)
+    s0_vals = np.array([e["params"]["o_solref"][0] for e in elites], dtype=float)
+    s1_vals = np.array([e["params"]["o_solref"][1] for e in elites], dtype=float)
     
+    # Extract friction components (3D array)
+    friction_slide = np.array([e["params"]["wheel_friction"][0] for e in elites], dtype=float)
+    friction_torsion = np.array([e["params"]["wheel_friction"][1] for e in elites], dtype=float)
+    friction_roll = np.array([e["params"]["wheel_friction"][2] for e in elites], dtype=float)
+    
+    # Extract remaining scalar parameters
+    rocker_stiffness = np.array([e["params"]["rocker_stiffness"] for e in elites], dtype=float)
+    rocker_damping = np.array([e["params"]["rocker_damping"] for e in elites], dtype=float)
+    wheel_kp = np.array([e["params"]["wheel_kp"] for e in elites], dtype=float)
+    wheel_kv = np.array([e["params"]["wheel_kv"] for e in elites], dtype=float)
+    max_magnetic_distance = np.array([e["params"]["max_magnetic_distance"] for e in elites], dtype=float)
+    
+    # Compute means
     mean = {
-        "o_solref0": float(np.mean(s0)),
-        "o_solref1": float(np.mean(s1)),
+        "Br": float(np.mean(Br_vals)),
+        "o_solref0": float(np.mean(s0_vals)),
+        "o_solref1": float(np.mean(s1_vals)),
+        "wheel_friction_slide": float(np.mean(friction_slide)),
+        "wheel_friction_torsion": float(np.mean(friction_torsion)),
+        "wheel_friction_roll": float(np.mean(friction_roll)),
+        "rocker_stiffness": float(np.mean(rocker_stiffness)),
+        "rocker_damping": float(np.mean(rocker_damping)),
+        "wheel_kp": float(np.mean(wheel_kp)),
+        "wheel_kv": float(np.mean(wheel_kv)),
+        "max_magnetic_distance": float(np.mean(max_magnetic_distance)),
     }
+    
+    # Compute standard deviations with small epsilon to prevent collapse
     std = {
-        "o_solref0": float(np.std(s0) + 1e-9),
-        "o_solref1": float(np.std(s1) + 1e-6),
+        "Br": float(np.std(Br_vals) + 1e-6),
+        "o_solref0": float(np.std(s0_vals) + 1e-9),
+        "o_solref1": float(np.std(s1_vals) + 1e-6),
+        "wheel_friction_slide": float(np.std(friction_slide) + 1e-6),
+        "wheel_friction_torsion": float(np.std(friction_torsion) + 1e-6),
+        "wheel_friction_roll": float(np.std(friction_roll) + 1e-6),
+        "rocker_stiffness": float(np.std(rocker_stiffness) + 1e-3),
+        "rocker_damping": float(np.std(rocker_damping) + 1e-4),
+        "wheel_kp": float(np.std(wheel_kp) + 1e-3),
+        "wheel_kv": float(np.std(wheel_kv) + 1e-4),
+        "max_magnetic_distance": float(np.std(max_magnetic_distance) + 1e-6),
     }
+    
     return mean, std
 
 
@@ -504,7 +553,269 @@ def print_results(best: Dict[str, Any]):
     
     print("="*115 + "\n")
 
+def show_with_enter_to_close(fig, prompt: str = "Focus the plot window and press Enter to close...") -> None:
+    """
+    Show a matplotlib figure and allow closing it by pressing Enter/Return
+    while the window is focused. This blocks until the window is closed.
+    """
+    import matplotlib.pyplot as plt
 
+    def _on_key(event):
+        if event.key in ("enter", "return"):
+            plt.close(event.canvas.figure)
+
+    fig.canvas.mpl_connect("key_press_event", _on_key)
+    print(f"\n[PLOT] {prompt}")
+    plt.show() 
+
+def plot_optimization_progress(cfg: OptimConfig) -> None:
+    """
+    Plot reward progression over trials for both hold and drive modes.
+    Focuses on smooth curves and trends rather than individual points.
+    
+    Args:
+        cfg: Optimization configuration
+    """
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    from pathlib import Path
+    
+    # Load CSV data
+    csv_path = Path(cfg.out_dir) / cfg.exp_name / "trials.csv"
+    
+    if not csv_path.exists():
+        print(f"[WARN] CSV file not found: {csv_path}")
+        return
+    
+    df = pd.read_csv(csv_path)
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('Optimization Progress', fontsize=16, fontweight='bold')
+    
+    # Calculate rolling averages
+    window = max(3, len(df) // 10)  # Adaptive window size
+    
+    # --- Plot 1: Hold Reward Over Time ---
+    ax1 = axes[0, 0]
+    rolling_mean_hold = df['reward_hold'].rolling(window=window, center=True).mean()
+    ax1.plot(df['trial_id'], rolling_mean_hold, '-', linewidth=2.5, 
+             label=f'Hold Reward (smoothed)', color='#2E86AB')
+    ax1.fill_between(df['trial_id'], 
+                      df['reward_hold'].rolling(window=window, center=True).quantile(0.25),
+                      df['reward_hold'].rolling(window=window, center=True).quantile(0.75),
+                      alpha=0.2, color='#2E86AB', label='25-75% range')
+    ax1.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+    ax1.set_xlabel('Trial ID', fontsize=11)
+    ax1.set_ylabel('Reward', fontsize=11)
+    ax1.set_title('HOLD Mode Reward (Minimize Sideways Drift)', fontsize=12, fontweight='bold')
+    ax1.grid(True, alpha=0.3, linestyle=':')
+    ax1.legend(fontsize=10)
+    
+    # --- Plot 2: Drive Reward Over Time ---
+    ax2 = axes[0, 1]
+    rolling_mean_drive = df['reward_drive'].rolling(window=window, center=True).mean()
+    ax2.plot(df['trial_id'], rolling_mean_drive, '-', linewidth=2.5, 
+             label='Drive Reward (smoothed)', color='#06A77D')
+    ax2.fill_between(df['trial_id'], 
+                      df['reward_drive'].rolling(window=window, center=True).quantile(0.25),
+                      df['reward_drive'].rolling(window=window, center=True).quantile(0.75),
+                      alpha=0.2, color='#06A77D', label='25-75% range')
+    ax2.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+    ax2.set_xlabel('Trial ID', fontsize=11)
+    ax2.set_ylabel('Reward', fontsize=11)
+    ax2.set_title('DRIVE Mode Reward (Maximize Upward Climb)', fontsize=12, fontweight='bold')
+    ax2.grid(True, alpha=0.3, linestyle=':')
+    ax2.legend(fontsize=10)
+    
+    # --- Plot 3: Combined Reward with Best So Far ---
+    ax3 = axes[1, 0]
+    rolling_mean_combined = df['reward'].rolling(window=window, center=True).mean()
+    best_so_far = df['reward'].cummax()
+    
+    ax3.plot(df['trial_id'], rolling_mean_combined, '-', linewidth=2.5, 
+             label='Combined Reward (smoothed)', color='#7209B7')
+    ax3.plot(df['trial_id'], best_so_far, '--', linewidth=2.5, 
+             label='Best So Far', color='#D62828', alpha=0.8)
+    ax3.fill_between(df['trial_id'], 
+                      df['reward'].rolling(window=window, center=True).quantile(0.25),
+                      df['reward'].rolling(window=window, center=True).quantile(0.75),
+                      alpha=0.2, color='#7209B7', label='25-75% range')
+    ax3.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+    ax3.set_xlabel('Trial ID', fontsize=11)
+    ax3.set_ylabel('Reward', fontsize=11)
+    ax3.set_title('Combined Reward (min of Hold & Drive)', fontsize=12, fontweight='bold')
+    ax3.grid(True, alpha=0.3, linestyle=':')
+    ax3.legend(fontsize=10)
+    
+    # --- Plot 4: Contact Percentage Trends ---
+    ax4 = axes[1, 1]
+    rolling_contact_hold = (df['contact_percentage_hold'] * 100).rolling(window=window, center=True).mean()
+    rolling_contact_drive = (df['contact_percentage_drive'] * 100).rolling(window=window, center=True).mean()
+    
+    ax4.plot(df['trial_id'], rolling_contact_hold, '-', linewidth=2.5,
+             label='Hold Contact %', color='#2E86AB')
+    ax4.plot(df['trial_id'], rolling_contact_drive, '-', linewidth=2.5,
+             label='Drive Contact %', color='#06A77D')
+    ax4.axhline(y=20, color='#D62828', linestyle='--', linewidth=2, 
+                label='Detachment Threshold', alpha=0.8)
+    ax4.set_xlabel('Trial ID', fontsize=11)
+    ax4.set_ylabel('Contact Percentage (%)', fontsize=11)
+    ax4.set_title('Wall Contact Over Time', fontsize=12, fontweight='bold')
+    ax4.set_ylim([0, 105])
+    ax4.grid(True, alpha=0.3, linestyle=':')
+    ax4.legend(fontsize=10)
+    
+    plt.tight_layout()
+    
+    # Save figure
+    plot_path = Path(cfg.out_dir) / cfg.exp_name / "optimization_progress.png"
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"\n📊 Optimization progress plot saved to: {plot_path}")
+    
+    # Show plot
+    show_with_enter_to_close(fig, "Optimization progress: press Enter to close and continue.")
+
+
+
+def plot_parameter_evolution(cfg: OptimConfig) -> None:
+    """
+    Plot how key parameters evolved during optimization.
+    Shows smooth trends with standard deviation bands.
+    
+    Args:
+        cfg: Optimization configuration
+    """
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import json
+    from pathlib import Path
+    
+    # Load JSONL data (has full parameter info)
+    jsonl_path = Path(cfg.out_dir) / cfg.exp_name / "trials.jsonl"
+    
+    if not jsonl_path.exists():
+        print(f"[WARN] JSONL file not found: {jsonl_path}")
+        return
+    
+    # Parse JSONL
+    trials = []
+    with jsonl_path.open("r") as f:
+        for line in f:
+            trials.append(json.loads(line))
+    
+    # Extract parameters
+    df = pd.DataFrame([
+        {
+            'trial_id': t['trial_id'],
+            'Br': t['params']['Br'],
+            'max_magnetic_distance': t['params']['max_magnetic_distance'],
+            'rocker_stiffness': t['params']['rocker_stiffness'],
+            'wheel_kp': t['params']['wheel_kp'],
+            'reward': t['reward']
+        }
+        for t in trials
+    ])
+    
+    # Create figure
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('Parameter Evolution During Optimization', fontsize=16, fontweight='bold')
+    
+    # Rolling window for smoothing
+    window = max(3, len(df) // 10)
+    
+    # --- Plot 1: Magnetic Remanence (Br) ---
+    ax1 = axes[0, 0]
+    rolling_mean = df['Br'].rolling(window=window, center=True).mean()
+    rolling_std = df['Br'].rolling(window=window, center=True).std()
+    
+    ax1.plot(df['trial_id'], rolling_mean, '-', linewidth=2.5, color='#E63946', label='Mean')
+    ax1.fill_between(df['trial_id'], 
+                      rolling_mean - rolling_std, 
+                      rolling_mean + rolling_std,
+                      alpha=0.3, color='#E63946', label='±1 std')
+    ax1.set_xlabel('Trial ID', fontsize=11)
+    ax1.set_ylabel('Br (Tesla)', fontsize=11)
+    ax1.set_title('Magnetic Remanence Evolution', fontsize=12, fontweight='bold')
+    ax1.grid(True, alpha=0.3, linestyle=':')
+    ax1.legend(fontsize=10)
+    
+    # Add range lines
+    br_range = PARAM_RANGES["Br"]
+    ax1.axhline(y=br_range[0], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    ax1.axhline(y=br_range[1], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    
+    # --- Plot 2: Max Magnetic Distance ---
+    ax2 = axes[0, 1]
+    rolling_mean = df['max_magnetic_distance'].rolling(window=window, center=True).mean()
+    rolling_std = df['max_magnetic_distance'].rolling(window=window, center=True).std()
+    
+    ax2.plot(df['trial_id'], rolling_mean, '-', linewidth=2.5, color='#F77F00', label='Mean')
+    ax2.fill_between(df['trial_id'], 
+                      rolling_mean - rolling_std, 
+                      rolling_mean + rolling_std,
+                      alpha=0.3, color='#F77F00', label='±1 std')
+    ax2.set_xlabel('Trial ID', fontsize=11)
+    ax2.set_ylabel('Max Magnetic Distance (m)', fontsize=11)
+    ax2.set_title('Magnetic Cutoff Distance Evolution', fontsize=12, fontweight='bold')
+    ax2.grid(True, alpha=0.3, linestyle=':')
+    ax2.legend(fontsize=10)
+    
+    # Add range lines
+    dist_range = PARAM_RANGES["max_magnetic_distance"]
+    ax2.axhline(y=dist_range[0], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    ax2.axhline(y=dist_range[1], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    
+    # --- Plot 3: Rocker Stiffness ---
+    ax3 = axes[1, 0]
+    rolling_mean = df['rocker_stiffness'].rolling(window=window, center=True).mean()
+    rolling_std = df['rocker_stiffness'].rolling(window=window, center=True).std()
+    
+    ax3.plot(df['trial_id'], rolling_mean, '-', linewidth=2.5, color='#06A77D', label='Mean')
+    ax3.fill_between(df['trial_id'], 
+                      rolling_mean - rolling_std, 
+                      rolling_mean + rolling_std,
+                      alpha=0.3, color='#06A77D', label='±1 std')
+    ax3.set_xlabel('Trial ID', fontsize=11)
+    ax3.set_ylabel('Rocker Stiffness (N·m/rad)', fontsize=11)
+    ax3.set_title('Rocker Stiffness Evolution', fontsize=12, fontweight='bold')
+    ax3.grid(True, alpha=0.3, linestyle=':')
+    ax3.legend(fontsize=10)
+    
+    # Add range lines
+    stiff_range = PARAM_RANGES["rocker_stiffness"]
+    ax3.axhline(y=stiff_range[0], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    ax3.axhline(y=stiff_range[1], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    
+    # --- Plot 4: Wheel Kp ---
+    ax4 = axes[1, 1]
+    rolling_mean = df['wheel_kp'].rolling(window=window, center=True).mean()
+    rolling_std = df['wheel_kp'].rolling(window=window, center=True).std()
+    
+    ax4.plot(df['trial_id'], rolling_mean, '-', linewidth=2.5, color='#2E86AB', label='Mean')
+    ax4.fill_between(df['trial_id'], 
+                      rolling_mean - rolling_std, 
+                      rolling_mean + rolling_std,
+                      alpha=0.3, color='#2E86AB', label='±1 std')
+    ax4.set_xlabel('Trial ID', fontsize=11)
+    ax4.set_ylabel('Wheel Kp (P Gain)', fontsize=11)
+    ax4.set_title('Wheel Controller Gain Evolution', fontsize=12, fontweight='bold')
+    ax4.grid(True, alpha=0.3, linestyle=':')
+    ax4.legend(fontsize=10)
+    
+    # Add range lines
+    kp_range = PARAM_RANGES["wheel_kp"]
+    ax4.axhline(y=kp_range[0], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    ax4.axhline(y=kp_range[1], color='gray', linestyle=':', alpha=0.5, linewidth=1)
+    
+    plt.tight_layout()
+    
+    # Save figure
+    plot_path = Path(cfg.out_dir) / cfg.exp_name / "parameter_evolution.png"
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"📊 Parameter evolution plot saved to: {plot_path}")
+    
+    show_with_enter_to_close(fig, "Parameter evolution: press Enter to close and continue.")
 # =============================================================================
 # MAIN OPTIMIZATION LOOP
 # =============================================================================
@@ -748,6 +1059,11 @@ if __name__ == "__main__":
     print("OPTIMIZATION COMPLETE")
     print("="*60)
     print_results(best)
+    
+    # Plot optimization progress
+    print("\nGenerating plots...")
+    plot_optimization_progress(cfg)
+    plot_parameter_evolution(cfg)
     
     # Launch viewer
     launch_viewer(cfg, best)

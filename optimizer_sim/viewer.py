@@ -1,12 +1,14 @@
 """
 viewer.py
 
-Visualization / sanity-check entry point.
+PURE visualization entry point.
 
-Purpose:
-- Visually inspect a rollout using the same simulation logic as optimization
-- Verify that tuned parameters actually change robot behavior
-- No optimization, no logging, no physics duplication
+Rules:
+- NO parameter overrides
+- NO spawn overrides
+- NO control overrides
+- NO physics divergence
+- Uses identical simulation path as optimization
 """
 
 import mujoco
@@ -15,77 +17,63 @@ import numpy as np
 import time
 import sys
 import select
+from pathlib import Path
 
 from sim_sally_magnet_wall import (
-    build_model, 
-    reset_data, 
-    apply_params, 
-    calculate_magnetic_force, 
+    build_model,
+    reset_data,
+    apply_params,
+    calculate_magnetic_force,
     DEFAULT_CONFIG,
-    run_xml_generator
+    run_xml_generator,
+    generate_scene_with_robot,
 )
 
-
 # =============================
-# Optional: parameters to inspect
-# (can be overridden by optimizer)
+# Parameters to inspect (ONLY overrides optimizer passes in)
 # =============================
-INSPECT_PARAMS = {
-    # Example overrides (can be empty)
-    # "Br": 1.2,
-    # "o_solref": [3e-4, 20],
-}
-
-
-# =============================
-# Simulation settings
-# =============================
-SIM_DURATION = 20.0
-FIXED_TORQUE = 0.5
+INSPECT_PARAMS = {}
 
 # Visual arrows
 ARROW_RADIUS = 0.005
 ARROW_COLOR = (0, 0, 1, 1)
 
+key_state = {"paused": False}
+
 
 # =============================================================================
 # HELPERS
 # =============================================================================
-def add_visual_arrow(scene, from_point, to_point, radius=0.005, rgba=(0, 0, 1, 1)):
+def add_visual_arrow(scene, from_point, to_point):
     if scene.ngeom >= scene.maxgeom:
         return
     mujoco.mjv_initGeom(
         scene.geoms[scene.ngeom],
         type=mujoco.mjtGeom.mjGEOM_ARROW,
-        size=np.array([radius, radius, np.linalg.norm(to_point - from_point)]),
+        size=np.array([ARROW_RADIUS, ARROW_RADIUS, np.linalg.norm(to_point - from_point)]),
         pos=np.zeros(3),
         mat=np.eye(3).flatten(),
-        rgba=np.array(rgba, dtype=np.float32),
+        rgba=np.array(ARROW_COLOR, dtype=np.float32),
     )
     mujoco.mjv_connector(
         scene.geoms[scene.ngeom],
         mujoco.mjtGeom.mjGEOM_ARROW,
-        radius,
+        ARROW_RADIUS,
         from_point,
         to_point,
     )
     scene.ngeom += 1
 
 
-key_state = {"paused": False}
-
-
 def check_keypress():
-    # Non-blocking check for any key typed in terminal
-    dr, dw, de = select.select([sys.stdin], [], [], 0)
+    dr, _, _ = select.select([sys.stdin], [], [], 0)
     if dr:
         return sys.stdin.readline().strip().lower()
     return None
 
 
 def key_callback(keycode):
-    # ASCII 32 = space
-    if keycode == 32:
+    if keycode == 32:  # space
         key_state["paused"] = not key_state["paused"]
 
 
@@ -93,143 +81,97 @@ def key_callback(keycode):
 # MAIN
 # =============================================================================
 def main():
-    from pathlib import Path
-    from sim_sally_magnet_wall import generate_scene_with_robot
-    
-    # Regenerate XML with correct mode
+    # XML generation (mode comes ONLY from INSPECT_PARAMS)
     mode = INSPECT_PARAMS.get("mode", "sideways")
     patched_robot_file = run_xml_generator(mode=mode)
-    
-    # Generate temporary scene that includes the patched robot
-    temp_scene_file = generate_scene_with_robot(patched_robot_file)
-    
+    scene_file = generate_scene_with_robot(patched_robot_file)
+
     try:
-        # Update config to use temporary scene
+        # Build config STRICTLY from DEFAULT_CONFIG
         config = dict(DEFAULT_CONFIG)
-        config["xml_file"] = temp_scene_file
-        
-        # Create config with position offset
-        config["robot_position_offset"] = [-0.2, 0.0, 0.0]  # 0.2m up the wall
-        
-        # Build model using the temporary scene
+        config["xml_file"] = scene_file
+
+        # Build model
         model, ids = build_model(config)
+
+        # Apply parameter overrides (optimizer / replay only)
         apply_params(model, INSPECT_PARAMS, config)
+
+        # Reset state (single source of truth)
         data = reset_data(model, config)
 
         dt = model.opt.timestep
-        n_steps = int(SIM_DURATION / dt)
+        sim_duration = config.get("sim_duration", 5.0)
+        n_steps = int(sim_duration / dt)
 
-        # Magnetic parameters (same logic as rollout)
-        Br = INSPECT_PARAMS.get("Br", DEFAULT_CONFIG["Br"])
-        V = DEFAULT_CONFIG["magnet_volume"]
-        MU_0 = DEFAULT_CONFIG["MU_0"]
-        max_force = DEFAULT_CONFIG["max_total_force"] / len(ids["wheel_body_ids"])
+        # Magnetic constants STRICTLY from config
+        Br = config["Br"]
+        V = config["magnet_volume"]
+        MU_0 = config["MU_0"]
+        max_force = config["max_total_force"] / len(ids["wheel_body_ids"])
+        max_dist = config["max_magnetic_distance"]
 
         fromto = np.zeros(6)
 
-        print("\n" + "="*60)
-        print("Launching viewer for rollout inspection...")
-        print("="*60)
+        print("\n" + "=" * 60)
+        print("Viewer (PURE PLAYER)")
+        print("=" * 60)
         print(f"Mode: {mode}")
-        print(f"Parameters: {INSPECT_PARAMS}")
-        print(f"Duration: {SIM_DURATION}s")
-        print(f"Fixed torque: {FIXED_TORQUE} N·m")
-        print("\nControls:")
-        print("  [Space] - Pause/Resume")
-        print("  [Esc]   - Quit")
-        print("="*60 + "\n")
-
-        sim_time = 0.0
-        step = 0
+        print(f"INSPECT_PARAMS: {INSPECT_PARAMS}")
+        print(f"Duration: {sim_duration}s")
+        print("=" * 60)
 
         with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
-            viewer._paused = False
-            key_state["paused"] = False
-
+            step = 0
             while viewer.is_running() and step < n_steps:
-                # Check terminal input
                 key = check_keypress()
                 if key == "p":
                     key_state["paused"] = not key_state["paused"]
-                    print(f"[{'PAUSED' if key_state['paused'] else 'RUNNING'}]")
 
-                # Clear arrows
                 viewer.user_scn.ngeom = 0
 
-                # Clear applied forces
                 for bid in ids["wheel_body_ids"]:
                     data.xfrc_applied[bid, :3] = 0.0
 
-                total_force = np.zeros(3)
-                wheel_forces = {}
-
-                # Magnetic force computation (same as rollout)
-                for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
+                for gid, bid in zip(ids["wheel_geom_ids"], ids["wheel_body_ids"]):
                     dist = mujoco.mj_geomDistance(
                         model, data, gid, ids["wall_id"], 50, fromto
                     )
-                    
-                    if dist < 0:
-                        wheel_forces[name] = 0.0
+
+                    if dist < 0 or dist > max_dist:
                         continue
 
                     n = fromto[3:6] - fromto[0:3]
                     norm = np.linalg.norm(n)
                     if norm < 1e-9:
-                        wheel_forces[name] = 0.0
                         continue
 
                     n_hat = n / norm
+                    fmag = np.clip(
+                        calculate_magnetic_force(dist, Br, V, MU_0),
+                        0.0,
+                        max_force,
+                    )
 
-                    fmag = calculate_magnetic_force(dist, Br, V, MU_0)
-                    fmag = np.clip(fmag, 0.0, max_force)
-                    wheel_forces[name] = float(fmag)
-
-                    fvec = fmag * n_hat
-                    data.xfrc_applied[bid, :3] = fvec
-                    total_force += fvec
-
-                    # Visual arrow
+                    data.xfrc_applied[bid, :3] = fmag * n_hat
                     add_visual_arrow(
                         viewer.user_scn,
                         fromto[0:3],
-                        fromto[0:3] + (-0.05) * n_hat,
-                        radius=ARROW_RADIUS,
-                        rgba=ARROW_COLOR,
+                        fromto[0:3] - 0.05 * n_hat,
                     )
 
-                # Fixed actuation
-                for aid in ids["wheel_actuator_ids"]:
-                    data.ctrl[aid] = FIXED_TORQUE
-
-                # Step simulation
                 if not key_state["paused"]:
                     mujoco.mj_step(model, data)
-                    sim_time += dt
                     step += 1
 
-                    # Print status every 100 steps
-                    if step % 100 == 0:
-                        print(
-                            f"t={sim_time:.3f}s | F={np.linalg.norm(total_force):.2f}N | "
-                            f"pos=[{data.qpos[0]:.3f}, {data.qpos[1]:.3f}, {data.qpos[2]:.3f}]"
-                        )
-
                 viewer.sync()
+                time.sleep(dt)
 
-                if not key_state["paused"]:
-                    time.sleep(dt)
-
-        print("\nViewer closed.")
-    
     finally:
-        # Clean up temporary files
-        try:
-            Path(temp_scene_file).unlink()
-            Path(patched_robot_file).unlink()
-            print(f"[CLEANUP] Removed temporary XML files")
-        except Exception as e:
-            pass
+        Path(scene_file).unlink(missing_ok=True)
+        Path(patched_robot_file).unlink(missing_ok=True)
+        print("[CLEANUP] XML files removed")
+
 
 if __name__ == "__main__":
     main()

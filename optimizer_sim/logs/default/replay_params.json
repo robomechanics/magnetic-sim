@@ -1,0 +1,41 @@
+{
+  "experiment_name": "baseline_default_config",
+  "trial_id": 0,
+  "reward": null,
+  "reward_hold": null,
+  "reward_drive": null,
+  "termination_hold": null,
+  "termination_drive": null,
+  "timestamp": "2026-01-29T05:20:38",
+  "parameters": {
+    "o_solref": [
+      0.0004,
+      25
+    ],
+    "o_solimp": [
+      0.99,
+      0.99,
+      0.001,
+      0.5,
+      2
+    ],
+    "Br": 1.48,
+    "max_magnetic_distance": 0.01,
+    "magnet_volume": 7.245298057341463e-06,
+    "max_total_force": 800.0,
+    "MU_0": 1.2566370614359173e-06,
+    "wheel_kp": 10.0,
+    "wheel_kv": 1.0,
+    "wheel_friction": [
+      0.95,
+      0.05,
+      0.05
+    ],
+    "rocker_stiffness": 30.0,
+    "rocker_damping": 1.0
+  },
+  "config": {
+    "sim_duration": 5.0,
+    "fixed_torque": 0.5
+  }
+}

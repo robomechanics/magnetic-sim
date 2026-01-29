@@ -1,0 +1,205 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="sally_mjcf">
+  <compiler angle="radian" meshdir="assets" autolimits="true" />
+  <option integrator="implicit" gravity="0 0 -9.81" cone="elliptic" impratio="10" noslip_iterations="15" />
+  <default>
+    <geom condim="6" contype="1" conaffinity="1" />
+  </default>
+  <compiler angle="radian" meshdir="assets" autolimits="true" />
+  <default>
+    
+      
+      
+    
+  </default>
+  <worldbody>
+    <body name="magnetic_wall" pos="0.25 0 0.35">
+      <geom name="wall_geom" type="box" size="0.02 0.7 0.7" rgba="0.8 0.8 0.8 1" friction="0.95 0.1 0.1" contype="1" conaffinity="1" />
+    </body>
+    <light pos="0 0 2" dir="0 0 -1" directional="true" diffuse="0.8 0.8 0.8" />
+    <body name="frame" pos="0.035 0 0.35" quat="0 -0.7071 0 0.7071">
+      <freejoint />
+      <geom mass="1.418814" type="mesh" pos="0.0180739 0.00440379 -0.0885384" quat="6.64008e-06 -7.24299e-06 1 -1.68313e-05" mesh="frame" material="frame_material" />
+      <body name="frame_linkage" pos="0.0180761 -0.139947 -0.101144" quat="0.707094 -0.707118 -0.00101616 -0.00100588">
+        <joint axis="0 0 1" name="right_hinge" type="hinge" stiffness="30.0" damping="1.0" />
+        <geom mass="0.07" type="mesh" pos="-3.46945e-18 0 0.0365" quat="0.707107 0.707107 0 1.5761e-19" mesh="frame_linkage" material="frame_linkage_material" />
+        <geom mass="0.3" type="mesh" pos="-1.38778e-17 0.02276 -0.020625" quat="0.5 0.5 0.5 -0.5" mesh="rocker" material="rocker_material" />
+        <body name="rocker_linkage" pos="-0.2166 0.018 -0.020625" quat="0.000000 0.000000 0.707107 0.707107">
+          <joint axis="0 0 1" name="BR_pivot" type="hinge" stiffness="30.0" damping="1.0" />
+          <geom mass="0.15" type="mesh" pos="-0.00559823 0.000140783 0.05862" quat="3.31439e-16 0.698162 -0.71594 -6.15131e-17" mesh="wheel_holder" material="wheel_holder_material" />
+          <geom mass="0.07" type="mesh" pos="-2.77556e-17 5.55112e-17 0.011" quat="9.09876e-17 -0.698162 0.71594 5.21112e-16" mesh="rocker_linkage" material="rocker_linkage_material" />
+          <body name="wheel_linkage" pos="-0.0309912 0.000739345 0.04662" quat="0.184652 0.677713 -0.201753 -0.682571">
+            <joint axis="0 0 1" name="BR_wheel" damping="0.1" />
+            <geom mass="0.08" type="mesh" pos="0 0 0" quat="0.707107 0.707107 0 -4.01208e-18" mesh="wheel_linkage" material="wheel_linkage_material" />
+            <body name="BR_wheel_geom" pos="0 0 -0.0165">
+              <geom name="BR_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 1" contype="1" conaffinity="1" friction="0.95 0.01 0.01" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+            </body>
+          </body>
+        </body>
+        <body name="rocker_linkage_2" pos="0.2166 0.018 -0.020625" quat="0.000000 0.000000 0.707107 0.707107">
+          <joint axis="0 0 1" name="FR_pivot" type="hinge" stiffness="30.0" damping="1.0" />
+          <geom mass="0.07" type="mesh" pos="2.77556e-17 0 0.011" quat="2.86822e-16 -0.693382 0.72057 1.85896e-16" mesh="rocker_linkage" material="rocker_linkage_material" />
+          <geom mass="0.15" type="mesh" pos="-0.00559586 0.000215279 0.05862" quat="2.86822e-16 -0.693382 0.72057 1.85896e-16" mesh="wheel_holder" material="wheel_holder_material" />
+          <body name="wheel_linkage_2" pos="-0.0309786 0.00115175 0.04662" quat="0.333211 0.610404 -0.356941 -0.623675">
+            <joint axis="0 0 1" name="FR_wheel" damping="0.1" />
+            <geom mass="0.08" type="mesh" pos="2.77556e-17 0 0" quat="0.707107 0.707107 0 1.2503e-17" mesh="wheel_linkage" material="wheel_linkage_material" />
+            <body name="FR_wheel_geom" pos="0 0 -0.0165">
+              <geom name="FR_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 1" contype="1" conaffinity="1" friction="0.95 0.01 0.01" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="frame_linkage_2" pos="0.0180719 0.148853 -0.101153" quat="0.498231 -0.498241 -0.50177 -0.501746">
+        <joint axis="0 0 1" name="left_hinge" type="hinge" stiffness="30.0" damping="1.0" />
+        <geom mass="0.07" type="mesh" pos="1.38778e-17 0 0.0365" quat="0.707107 0.707107 0 -4.24203e-19" mesh="frame_linkage" material="frame_linkage_material" />
+        <geom mass="0.3" type="mesh" pos="-0.02276 -1.04083e-17 0.020625" quat="0.707107 1.4179e-17 0.707107 -2.23058e-16" mesh="rocker" material="rocker_material" />
+        <body name="rocker_linkage_3" pos="-0.018 -0.2166 0.020625" quat="-0.500000 -0.500000 0.500000 0.500000">
+          <joint axis="0 0 1" name="BL_pivot" type="hinge" stiffness="30.0" damping="1.0" />
+          <geom mass="0.07" type="mesh" pos="0 0 0.011" quat="1.07501e-18 -0.707107 0.707107 -2.09885e-17" mesh="rocker_linkage" material="rocker_linkage_material" />
+          <geom mass="0.15" type="mesh" pos="0.0056 0 0.05862" quat="1.17978e-18 -0.707107 -0.707107 2.0055e-17" mesh="wheel_holder" material="wheel_holder_material" />
+          <body name="wheel_linkage_3" pos="0.031 4e-05 0.04662" quat="0.505916 -0.494014 0.505916 -0.494014">
+            <joint axis="0 0 1" name="BL_wheel" damping="0.1" />
+            <geom mass="0.08" type="mesh" pos="2.77556e-17 -2.77556e-17 -0.052" quat="0.707107 -0.707107 0 -2.35867e-18" mesh="wheel_linkage" material="wheel_linkage_material" />
+            <body name="BL_wheel_geom" pos="0 0 -0.0165">
+              <geom name="BL_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 1" contype="1" conaffinity="1" friction="0.95 0.01 0.01" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+            </body>
+          </body>
+        </body>
+        <body name="rocker_linkage_4" pos="-0.018 0.2166 0.020625" quat="-0.500000 -0.500000 0.500000 0.500000">
+          <joint axis="0 0 1" name="FL_pivot" type="hinge" stiffness="30.0" damping="1.0" />
+          <geom mass="0.07" type="mesh" pos="-1.38778e-16 -2.77556e-17 0.011" quat="3.71573e-18 -0.703399 0.710795 -1.77453e-17" mesh="rocker_linkage" material="rocker_linkage_material" />
+          <geom mass="0.15" type="mesh" pos="0.00559969 -5.85778e-05 0.05862" quat="1.10843e-18 -0.710795 -0.703399 1.52529e-17" mesh="wheel_holder" material="wheel_holder_material" />
+          <body name="wheel_linkage_4" pos="0.0309987 -0.000284272 0.04662" quat="0.491361 0.503325 -0.496653 -0.508493">
+            <joint axis="0 0 1" name="FL_wheel" damping="0.1" />
+            <geom mass="0.08" type="mesh" pos="0 0 0.052" quat="0.707107 0.707107 -0 -1.17884e-18" mesh="wheel_linkage" material="wheel_linkage_material" />
+            <body name="FL_wheel_geom" pos="0 0 0.0165">
+              <geom name="FL_cyl" type="cylinder" size="0.025 0.013" rgba="0.8 0.2 0.2 1" contype="1" conaffinity="1" friction="0.95 0.01 0.01" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.000000 0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.022000 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="-0.000000 -0.022000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+              <geom type="sphere" size="0.002" pos="0.015556 -0.015556 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" friction="0.1 0.1 0.1" mass="1e-6" />
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <asset>
+    <mesh file="frame_linkage.stl" />
+    <mesh file="rocker.stl" />
+    <mesh file="frame.stl" />
+    <mesh file="wheel.stl" />
+    <mesh file="rocker_linkage.stl" />
+    <mesh file="wheel_holder.stl" />
+    <mesh file="wheel_linkage.stl" />
+    <material name="frame_material" rgba="0.647059 0.647059 0.647059 1" />
+    <material name="frame_linkage_material" rgba="0.231373 0.380392 0.705882 1" />
+    <material name="rocker_material" rgba="0.890196 0.698039 0.639216 1" />
+    <material name="wheel_holder_material" rgba="0.917647 0.917647 0.917647 1" />
+    <material name="rocker_linkage_material" rgba="0.972549 0.529412 0.00392157 1" />
+    <material name="wheel_linkage_material" rgba="0.768627 0.886275 0.952941 1" />
+    <material name="wheel_material" rgba="0.498039 0.498039 0.498039 1" />
+  </asset>
+  <actuator>
+    <position name="BR_pivot" joint="BR_pivot" kp="20" kv="10" />
+    <position name="FR_pivot" joint="FR_pivot" kp="20" kv="10" />
+    <position name="BL_pivot" joint="BL_pivot" kp="20" kv="10" />
+    <position name="FL_pivot" joint="FL_pivot" kp="20" kv="10" />
+    <motor name="BR_wheel_motor" joint="BR_wheel" gear="1.0" forcerange="-3.0 3.0" />
+    <motor name="FR_wheel_motor" joint="FR_wheel" gear="1.0" forcerange="-3.0 3.0" />
+    <motor name="BL_wheel_motor" joint="BL_wheel" gear="1.0" forcerange="-3.0 3.0" />
+    <motor name="FL_wheel_motor" joint="FL_wheel" gear="1.0" forcerange="-3.0 3.0" />
+  </actuator>
+</mujoco>

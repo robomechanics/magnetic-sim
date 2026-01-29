@@ -55,7 +55,7 @@ DEFAULT_CONFIG = {
     "wall_euler": [0, 0.785398163, 0],  # [roll, pitch, yaw] in radians (45° pitch)
     "robot_body_name": "frame",
     "robot_initial_quat": None,  # If None, compute from wall_euler
-    "robot_position_offset": [0.0, 0.0, 0.0],  # [along, across, normal] in wall frame
+    "robot_position_offset": [-0.2, 0.0, 0.0],  # [along, across, normal] in wall frame
     
     # Model naming (must match MJCF)
     "wall_geom_name": "wall_geom",
@@ -109,7 +109,7 @@ def run_xml_generator(mode: str = "sideways") -> str:
     env["OUTPUT_FILE"] = output_file
     env["NO_AUTOLAUNCH"] = "1"
     
-    print(f"[INFO] Generating patched robot XML (MODE={mode}) -> {output_file}")
+    # print(f"[INFO] Generating patched robot XML (MODE={mode}) -> {output_file}")
     subprocess.run([sys.executable, str(script_path)], check=True, env=env)
     
     return output_file
@@ -375,7 +375,7 @@ def apply_wall_rotation(model: mujoco.MjModel, euler: List[float], wall_body_nam
     quat = rot.as_quat()
     model.body_quat[wall_body_id] = np.array([quat[3], quat[0], quat[1], quat[2]], dtype=np.float64)
     
-    print(f"[INFO] Applied wall rotation: euler={euler} -> quat=[{quat[3]:.4f}, {quat[0]:.4f}, {quat[1]:.4f}, {quat[2]:.4f}]")
+    # print(f"[INFO] Applied wall rotation: euler={euler} -> quat=[{quat[3]:.4f}, {quat[0]:.4f}, {quat[1]:.4f}, {quat[2]:.4f}]")
 
 
 def apply_robot_initial_pose(
@@ -432,7 +432,7 @@ def apply_robot_initial_pose(
             # Orientation
             data.qpos[jnt_qposadr + 3:jnt_qposadr + 7] = quat_mujoco
             
-            print(f"[INFO] Robot position offset: {offset_world}, orientation: {quat_mujoco}")
+            # print(f"[INFO] Robot position offset: {offset_world}, orientation: {quat_mujoco}")
             return
 
 
@@ -500,7 +500,7 @@ def rollout(
         settle_steps = int(settle_time / dt)
         fromto = np.zeros(6)
         
-        print(f"[SETTLING] Running {settle_steps} steps ({settle_time}s) to let robot settle...")
+        # print(f"[SETTLING] Running {settle_steps} steps ({settle_time}s) to let robot settle...")
         for _ in range(settle_steps):
             # Apply magnetic forces (no wheel control)
             for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
@@ -519,7 +519,7 @@ def rollout(
             
             mujoco.mj_step(model, data)
         
-        print(f"[SETTLING] Complete. Starting main simulation...")
+        # print(f"[SETTLING] Complete. Starting main simulation...")
         
         # =====================================================================
         # MAIN SIMULATION
@@ -534,6 +534,7 @@ def rollout(
         
         metric_cfg = MetricConfig(mode=rollout_mode)
         target_speed = cfg.get("target_wheel_speed_rad_s", 5.0)
+        distance_threshold = 0.03  # Fixed threshold for contact detection in metrics
         
         try:
             for k in range(n_steps):
@@ -549,27 +550,28 @@ def rollout(
                 for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
                     dist = mujoco.mj_geomDistance(model, data, gid, ids["wall_id"], 50, fromto)
                     
-                    # Check distance threshold
-                    if dist < 0 or dist > max_magnetic_distance:
+                    # PHYSICS: Apply magnetic force if within max_magnetic_distance
+                    if dist >= 0 and dist <= max_magnetic_distance:
+                        n = fromto[3:6] - fromto[0:3]
+                        norm = np.linalg.norm(n)
+                        if norm > 1e-9:
+                            fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
+                            fmag = np.clip(fmag, 0.0, max_force_per_wheel)
+                            wheel_forces[name] = float(fmag)
+                            
+                            fvec = fmag * (n / norm)
+                            data.xfrc_applied[bid, :3] = fvec
+                            total_force += fvec
+                        else:
+                            wheel_forces[name] = 0.0
+                    else:
                         wheel_forces[name] = 0.0
-                        wheel_dists.append(float("inf"))
-                        continue
                     
-                    wheel_dists.append(float(dist))
-                    
-                    n = fromto[3:6] - fromto[0:3]
-                    norm = np.linalg.norm(n)
-                    if norm < 1e-9:
-                        wheel_forces[name] = 0.0
-                        continue
-                    
-                    fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
-                    fmag = np.clip(fmag, 0.0, max_force_per_wheel)
-                    wheel_forces[name] = float(fmag)
-                    
-                    fvec = fmag * (n / norm)
-                    data.xfrc_applied[bid, :3] = fvec
-                    total_force += fvec
+                    # METRICS: Record contact status for metrics (uses fixed threshold)
+                    if dist >= 0 and dist <= distance_threshold:
+                        wheel_dists.append(float(dist))  # "In contact" for metrics
+                    else:
+                        wheel_dists.append(float("inf"))  # "Detached" for metrics
                 
                 # Position control (wheels spin at constant rate)
                 for aid in ids["wheel_actuator_ids"]:
@@ -658,7 +660,8 @@ def rollout(
         try:
             Path(temp_scene_file).unlink()
             Path(patched_robot_file).unlink()
-            print(f"[CLEANUP] Removed {patched_robot_file}")
+            # print(f"[CLEANUP] Removed {patched_robot_file}")
+
         except Exception:
             pass
 
