@@ -337,7 +337,9 @@ def apply_params(
                     model.actuator_gainprm[aid, 0] = float(params["wheel_kp"])
                 if "wheel_kv" in params:
                     model.actuator_biasprm[aid, 2] = float(params["wheel_kv"])
-    
+    if "noslip_iterations" in params:
+        model.opt.noslip_iterations = int(params["noslip_iterations"])
+        
     # Readback
     readback = {
         "timestep": float(model.opt.timestep),
