@@ -1,21 +1,21 @@
 {
-  "reward": -0.0,
-  "trial_id": 71,
+  "reward": -0.03413191797298684,
+  "trial_id": 23,
   "params": {
-    "Br": 1.4329040680814265,
-    "solref_timeconst": 0.0003943087696488615,
-    "solref_dampratio": 21.89646707931254,
-    "solimp_dmin": 0.9683954377448756,
-    "solimp_dmax": 0.9612347532555099,
-    "solimp_width": 0.0018078337071122522,
-    "sliding_friction": 0.9850155323403305,
-    "torsional_friction": 0.039431347528576806,
-    "rolling_friction": 0.007053742088377069,
-    "rocker_stiffness": 65.8383549853866,
-    "rocker_damping": 3.2536735420026495,
-    "wheel_kp": 14.022857951676974,
-    "wheel_kv": 1.0693335480348125,
-    "max_magnetic_distance": 0.043819263067840404,
-    "noslip_iterations": 12.099166528330478
+    "Br": 1.4605729411531134,
+    "solref_timeconst": 0.0005355929876878867,
+    "solref_dampratio": 22.058451773375364,
+    "solimp_dmin": 0.9178243909430186,
+    "solimp_dmax": 0.9527783316225156,
+    "solimp_width": 0.003636305809194323,
+    "sliding_friction": 0.9255562547656192,
+    "torsional_friction": 0.04518499332769698,
+    "rolling_friction": 0.009163513675481391,
+    "rocker_stiffness": 50.56399239171735,
+    "rocker_damping": 1.1755284522716911,
+    "wheel_kp": 12.88887352851569,
+    "wheel_kv": 1.3831651183052838,
+    "max_magnetic_distance": 0.06428907022638972,
+    "noslip_iterations": 13.00034238824405
   }
 }

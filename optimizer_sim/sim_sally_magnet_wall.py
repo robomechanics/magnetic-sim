@@ -453,7 +453,6 @@ def rollout(
     *,
     sim_duration: float = 5.0,
     config: Optional[Dict[str, Any]] = None,
-    fixed_torque: float = 0.5,
     settle_time: float = 1.0,
     log_stride: int = 10,
 ) -> RolloutResult:

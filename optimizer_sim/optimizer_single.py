@@ -52,7 +52,7 @@ print("Base XML file generated.\n")
 class OptimConfig:
     """Optimization run configuration."""
     # Optimization settings
-    n_trials: int = 300
+    n_trials: int = 100
     seed: int = 0
     n_workers: int = 10  # Parallel workers (>1 for parallelism)
     
@@ -668,11 +668,11 @@ def launch_viewer(cfg: OptimConfig, best: Dict[str, Any]):
         print("BASELINE - HOLD MODE (default parameters)")
         print("="*60)
         
-        viewer_single.INSPECT_PARAMS = {}
+        viewer_single.INSPECT_PARAMS = {"mode": "sideways"}  # ADD MODE!
         viewer_single.SIM_DURATION = cfg.sim_duration
         viewer_single.SETTLE_TIME = cfg.settle_time
         viewer_single.main()
-    
+            
     # Optimized comparison
     response2 = input("\nPress ENTER to view BEST OPTIMIZED run, or 'n' to skip: ").strip().lower()
     
@@ -684,7 +684,8 @@ def launch_viewer(cfg: OptimConfig, best: Dict[str, Any]):
         print(f"Position drift: {best['params'].get('position_drift_m', 'N/A')} m")
         
         best_params = build_rollout_params(best["params"])
-        
+        best_params["mode"] = "sideways"  # ADD MODE!
+
         viewer_single.INSPECT_PARAMS = best_params
         viewer_single.SIM_DURATION = cfg.sim_duration
         viewer_single.SETTLE_TIME = cfg.settle_time

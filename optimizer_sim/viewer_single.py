@@ -1,8 +1,8 @@
 """
 viewer_single.py
 
-Interactive viewer for magnetic wall-climbing robot hold mode.
-Visualizes position-based optimization results.
+Interactive LIVE viewer for magnetic wall-climbing robot (single mode).
+Similar to viewer.py but for the single-mode optimization system.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 import time
 import json
+import select
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -17,7 +18,13 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
-from sim_sally_magnet_wall_single import rollout, run_xml_generator, generate_scene_with_robot
+from sim_sally_magnet_wall_single import (
+    build_model,
+    reset_data,
+    apply_params,
+    calculate_magnetic_force,
+    DEFAULT_CONFIG,
+)
 
 
 # =============================================================================
@@ -28,127 +35,198 @@ INSPECT_PARAMS: Optional[Dict[str, Any]] = None
 SIM_DURATION: float = 5.0
 SETTLE_TIME: float = 1.0
 
+# Visual settings
+ARROW_RADIUS = 0.005
+ARROW_COLOR = (0, 0, 1, 1)
+
+key_state = {"paused": False}
+
 
 # =============================================================================
-# VIEWER FUNCTIONS
+# HELPER FUNCTIONS
+# =============================================================================
+
+def add_visual_arrow(scene, from_point, to_point):
+    """Add a visual arrow to the scene."""
+    if scene.ngeom >= scene.maxgeom:
+        return
+    mujoco.mjv_initGeom(
+        scene.geoms[scene.ngeom],
+        type=mujoco.mjtGeom.mjGEOM_ARROW,
+        size=np.array([ARROW_RADIUS, ARROW_RADIUS, np.linalg.norm(to_point - from_point)]),
+        pos=np.zeros(3),
+        mat=np.eye(3).flatten(),
+        rgba=np.array(ARROW_COLOR, dtype=np.float32),
+    )
+    mujoco.mjv_connector(
+        scene.geoms[scene.ngeom],
+        mujoco.mjtGeom.mjGEOM_ARROW,
+        ARROW_RADIUS,
+        from_point,
+        to_point,
+    )
+    scene.ngeom += 1
+
+
+def check_keypress():
+    """Check for keyboard input (non-blocking)."""
+    dr, _, _ = select.select([sys.stdin], [], [], 0)
+    if dr:
+        return sys.stdin.readline().strip().lower()
+    return None
+
+
+def key_callback(keycode):
+    """Handle keyboard callbacks from viewer."""
+    if keycode == 32:  # space
+        key_state["paused"] = not key_state["paused"]
+
+
+# =============================================================================
+# MAIN VIEWER
 # =============================================================================
 
 def main():
-    """Launch interactive MuJoCo viewer."""
+    """Launch interactive MuJoCo viewer with LIVE simulation."""
     
-    # Generate XML
-    print("Generating XML for viewer...")
-    patched_robot_file = run_xml_generator(mode="sideways")
-    print(f"Generated robot XML: {patched_robot_file}")
+    # Get mode from INSPECT_PARAMS (defaults to sideways)
+    mode = "sideways"
+    if INSPECT_PARAMS:
+        mode = INSPECT_PARAMS.get("mode", "sideways")
     
-    # Verify robot file exists
-    if not Path(patched_robot_file).exists():
-        raise FileNotFoundError(f"Robot XML not found: {patched_robot_file}")
+    print("\n" + "=" * 60)
+    print("LIVE VIEWER - HOLD MODE")
+    print("=" * 60)
+    print(f"Mode: {mode}")
+    print(f"Duration: {SIM_DURATION}s")
+    if INSPECT_PARAMS:
+        print(f"Parameter overrides: {len(INSPECT_PARAMS)} params")
+    print("=" * 60)
     
-    # Run rollout to get trajectory FIRST
-    print("Running simulation...")
+    # Build config from DEFAULT_CONFIG
+    config = dict(DEFAULT_CONFIG)
+    config["mode"] = mode
     
-    params = INSPECT_PARAMS.copy() if INSPECT_PARAMS else {}
-    params["_xml_file_override"] = patched_robot_file
+    # Generate XML file or use pre-generated one
+    # Check if a pre-generated file exists, otherwise generate one
+    from sim_sally_magnet_wall_single import run_xml_generator, generate_scene_with_robot
     
-    result = rollout(
-        params=params,
-        sim_duration=SIM_DURATION,
-        settle_time=SETTLE_TIME,
-        log_stride=1,  # Log every step for smooth playback
-    )
+    base_robot_file = f"robot_sally_patched_{mode}.xml"
+    if not Path(base_robot_file).exists():
+        print(f"Generating XML file for mode '{mode}'...")
+        base_robot_file = run_xml_generator(mode=mode)
+        print(f"Generated: {base_robot_file}")
+    else:
+        print(f"Using existing XML: {base_robot_file}")
     
-    print(f"Simulation complete: {result.termination}")
-    print(f"Reward: {result.summary['reward']:.6f}")
-    print(f"Position drift: {result.summary['position_drift_m']:.6f} m")
+    # Generate scene file that includes the robot
+    scene_file = generate_scene_with_robot(base_robot_file)
+    config["xml_file"] = scene_file
     
-    # Verify robot file still exists after rollout
-    if not Path(patched_robot_file).exists():
-        raise FileNotFoundError(f"Robot XML was deleted during rollout: {patched_robot_file}")
+    # Build model
+    print("Building model...")
+    model, ids = build_model(config)
+    print(f"Model built: {model.nq} DOFs, {model.nbody} bodies")
     
-    # Regenerate scene file for viewer (rollout deleted it)
-    print(f"Regenerating scene file from: {patched_robot_file}")
-    scene_file = generate_scene_with_robot(patched_robot_file)
-    print(f"Generated scene file: {scene_file}")
+    # Apply parameter overrides (from optimizer)
+    if INSPECT_PARAMS:
+        print("Applying parameter overrides...")
+        apply_params(model, INSPECT_PARAMS, config)
     
-    # Verify scene file exists
-    if not Path(scene_file).exists():
-        raise FileNotFoundError(f"Scene file was not created: {scene_file}")
+    # Reset state
+    print("Resetting simulation state...")
+    data = reset_data(model, config)
     
-    # Load model for viewer
-    model = mujoco.MjModel.from_xml_path(scene_file)
-    data = mujoco.MjData(model)
+    # Simulation parameters
+    dt = model.opt.timestep
+    n_steps = int(SIM_DURATION / dt)
     
-    # State for playback
-    trajectory = result.trajectory
-    current_frame = [0]  # Mutable to modify in callback
-    paused = [False]
-    playback_speed = [1.0]
+    # Magnetic constants from config
+    Br = config["Br"]
+    V = config["magnet_volume"]
+    MU_0 = config["MU_0"]
+    max_force = config["max_total_force"] / len(ids["wheel_body_ids"])
+    max_dist = config["max_magnetic_distance"]
     
-    def key_callback(keycode):
-        """Handle keyboard input."""
-        if keycode == 32:  # Space bar
-            paused[0] = not paused[0]
-            print("Paused" if paused[0] else "Playing")
-        elif keycode == 262:  # Right arrow
-            current_frame[0] = min(current_frame[0] + 1, len(trajectory) - 1)
-        elif keycode == 263:  # Left arrow
-            current_frame[0] = max(current_frame[0] - 1, 0)
-        elif keycode == 82 or keycode == 114:  # R or r
-            current_frame[0] = 0
-            print("Reset to start")
-        elif keycode == 61:  # + key
-            playback_speed[0] = min(playback_speed[0] * 1.5, 10.0)
-            print(f"Speed: {playback_speed[0]:.1f}x")
-        elif keycode == 45:  # - key
-            playback_speed[0] = max(playback_speed[0] / 1.5, 0.1)
-            print(f"Speed: {playback_speed[0]:.1f}x")
+    fromto = np.zeros(6)
     
-    # Launch viewer
     print("\nControls:")
-    print("  SPACE: Pause/Play")
-    print("  R: Reset to start")
-    print("  +/-: Speed up/down")
-    print("  Arrow keys: Step frame")
-    print("  ESC: Exit\n")
+    print("  SPACE: Pause/Resume")
+    print("  P: Toggle pause")
+    print("  ESC: Exit")
+    print("\nStarting viewer...\n")
     
     with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
-        last_time = time.time()
+        step = 0
         
-        while viewer.is_running():
-            if not paused[0]:
-                # Advance frame based on playback speed
-                current_time = time.time()
-                dt = current_time - last_time
-                last_time = current_time
+        while viewer.is_running() and step < n_steps:
+            # Check for keyboard input
+            key = check_keypress()
+            if key == "p":
+                key_state["paused"] = not key_state["paused"]
+                print("Paused" if key_state["paused"] else "Playing")
+            
+            # Clear previous visual geometry
+            viewer.user_scn.ngeom = 0
+            
+            # Reset applied forces
+            for bid in ids["wheel_body_ids"]:
+                data.xfrc_applied[bid, :3] = 0.0
+            
+            # Apply magnetic forces to each wheel
+            for gid, bid in zip(ids["wheel_geom_ids"], ids["wheel_body_ids"]):
+                # Calculate distance to wall
+                dist = mujoco.mj_geomDistance(
+                    model, data, gid, ids["wall_id"], 50, fromto
+                )
                 
-                frame_advance = dt * playback_speed[0] * 100  # 100 Hz nominal
-                current_frame[0] += int(frame_advance)
+                if dist < 0 or dist > max_dist:
+                    continue
                 
-                if current_frame[0] >= len(trajectory):
-                    current_frame[0] = 0  # Loop
+                # Calculate normal vector
+                n = fromto[3:6] - fromto[0:3]
+                norm = np.linalg.norm(n)
+                if norm < 1e-9:
+                    continue
+                
+                n_hat = n / norm
+                
+                # Calculate magnetic force
+                fmag = np.clip(
+                    calculate_magnetic_force(dist, Br, V, MU_0),
+                    0.0,
+                    max_force,
+                )
+                
+                # Apply force
+                data.xfrc_applied[bid, :3] = fmag * n_hat
+                
+                # Visualize magnetic force with blue arrow
+                add_visual_arrow(
+                    viewer.user_scn,
+                    fromto[0:3],
+                    fromto[0:3] - 0.25 * n_hat,
+                )
             
-            # Update visualization
-            idx = min(current_frame[0], len(trajectory) - 1)
-            frame_data = trajectory[idx]
-            
-            # Set state
-            data.qpos[:7] = frame_data["qpos"]
-            data.qvel[:6] = frame_data["qvel"]
-            
-            # Forward kinematics
-            mujoco.mj_forward(model, data)
+            # Step simulation if not paused
+            if not key_state["paused"]:
+                mujoco.mj_step(model, data)
+                step += 1
             
             # Update viewer
             viewer.sync()
-            time.sleep(0.01)
+            time.sleep(dt)
     
-    # Cleanup
+    print("\nSimulation complete!")
+    print(f"Final position: {data.qpos[:3]}")
+    
+    # Cleanup temporary scene file
     try:
-        Path(scene_file).unlink()
-        Path(patched_robot_file).unlink()
-    except Exception:
-        pass
+        if Path(scene_file).exists():
+            Path(scene_file).unlink()
+            print(f"Cleaned up: {scene_file}")
+    except Exception as e:
+        print(f"Warning: Could not cleanup {scene_file}: {e}")
 
 
 def view_best_trial(exp_name: str = "single_hold"):
@@ -164,12 +242,15 @@ def view_best_trial(exp_name: str = "single_hold"):
     with best_path.open("r", encoding="utf-8") as f:
         best = json.load(f)
     
+    print(f"\n{'='*60}")
     print(f"Viewing best trial {best['trial_id']}")
     print(f"Reward: {best['reward']:.6f}")
+    print(f"{'='*60}")
     
-    # Convert to rollout format
+    # Convert to viewer format
     from optimizer_single import build_rollout_params
     params = build_rollout_params(best["params"])
+    params["mode"] = "sideways"  # Ensure mode is set
     
     global INSPECT_PARAMS
     INSPECT_PARAMS = params

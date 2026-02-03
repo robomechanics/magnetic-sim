@@ -47,11 +47,11 @@ DEFAULT_CONFIG = {
     # Control (no wheel motion in hold mode)
     "target_wheel_speed_rad_s": 0.0,
     
-    # Robot pose
-    "wall_euler": [0, 1.5708, 0],  # [roll, pitch, yaw] in radians (90° pitch = vertical wall)
+    # Robot pose (SIMPLIFIED - matching multi-mode approach)
+    "wall_euler": [0, 0.785398163, 0],  # [roll, pitch, yaw] in radians (45° pitch like multi-mode)
     "robot_body_name": "frame",
-    "robot_initial_quat": None,  # If None, compute from wall_euler
-    "robot_position_offset": [0.0, 0.0, 0.0],  # [along, across, normal] in wall frame
+    "robot_initial_quat": None,  # If None, compute from wall_euler + perpendicular rotation
+    "robot_position_offset": [-0.2, 0.0, 0.0],  # [along, across, normal] in wall frame - XML has position
     
     # Model naming (must match MJCF)
     "wall_geom_name": "wall_geom",
@@ -278,20 +278,35 @@ def apply_robot_initial_pose(
         return
     
     # Compute orientation
-    if robot_quat is None:
-        rot = R.from_euler('xyz', wall_euler, degrees=False)
-        quat_scipy = rot.as_quat()
-        robot_quat = [quat_scipy[3], quat_scipy[0], quat_scipy[1], quat_scipy[2]]
+    if robot_quat is not None:
+        quat_mujoco = np.array(robot_quat, dtype=np.float64)
+    else:
+        # Perpendicular to wall (SAME AS MULTI-MODE)
+        wall_rot = R.from_euler('xyz', wall_euler, degrees=False)
+        perp_rot = R.from_euler('y', -np.pi/2, degrees=False)
+        robot_rot = wall_rot * perp_rot
+        quat_scipy = robot_rot.as_quat()
+        quat_mujoco = np.array([quat_scipy[3], quat_scipy[0], quat_scipy[1], quat_scipy[2]], dtype=np.float64)
     
-    # Set orientation
-    data.qpos[3:7] = np.array(robot_quat, dtype=np.float64)
+    # Compute position offset in world frame
+    if position_offset is not None and any(position_offset):
+        wall_rot = R.from_euler('xyz', wall_euler, degrees=False)
+        offset_world = wall_rot.apply(position_offset)
+    else:
+        offset_world = np.zeros(3)
     
-    # Set position
-    if position_offset is not None and len(position_offset) == 3:
-        # Transform offset from wall frame to world frame
-        rot_mat = R.from_euler('xyz', wall_euler, degrees=False).as_matrix()
-        offset_world = rot_mat @ np.array(position_offset, dtype=np.float64)
-        data.qpos[0:3] = offset_world
+    # Apply to freejoint (SAME AS MULTI-MODE - ADDS to current position!)
+    for i in range(model.njnt):
+        if model.jnt_bodyid[i] == robot_body_id and model.jnt_type[i] == mujoco.mjtJoint.mjJNT_FREE:
+            jnt_qposadr = model.jnt_qposadr[i]
+            
+            # Position: ADD offset to current position (preserves XML position!)
+            current_pos = data.qpos[jnt_qposadr:jnt_qposadr + 3].copy()
+            data.qpos[jnt_qposadr:jnt_qposadr + 3] = current_pos + offset_world
+            
+            # Orientation
+            data.qpos[jnt_qposadr + 3:jnt_qposadr + 7] = quat_mujoco
+            break
     
     # Forward kinematics to update dependent bodies
     mujoco.mj_forward(model, data)
@@ -554,8 +569,15 @@ def rollout(
     cfg = DEFAULT_CONFIG.copy()
     cfg.update(params)
     
-    # Use single base patched XML file
-    patched_robot_file = "robot_sally_patched.xml"
+    # Extract mode from params (defaults to "sideways")
+    xml_mode = params.get("mode", "sideways")
+    
+    # Use XML file from params if provided, otherwise generate one
+    if "_xml_file_override" in params:
+        patched_robot_file = params["_xml_file_override"]
+    else:
+        patched_robot_file = "robot_sally_patched.xml"
+    
     temp_scene_file = generate_scene_with_robot(patched_robot_file)
     cfg["xml_file"] = temp_scene_file
     cfg["mode"] = xml_mode  # Pass mode to reset_data for wheel rotations
