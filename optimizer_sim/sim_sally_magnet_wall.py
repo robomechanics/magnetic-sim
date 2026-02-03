@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import os
 import sys
-import subprocess
-from datetime import datetime
+# import subprocess
+# from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Tuple
@@ -81,71 +81,74 @@ class RolloutResult:
 
 
 # =============================================================================
-# XML GENERATION
+# ROCKER LINKAGE CONFIGURATION
 # =============================================================================
 
-def run_xml_generator(mode: str = "sideways") -> str:
+# Rocker linkage configurations for different drive modes
+ROCKER_CONFIGS = {
+    "sideways": {
+        "rocker_linkage": {
+            "pos": [-0.2166, 0.018, -0.020625],
+            "quat": [0.5, -0.5, 0.5, 0.5]
+        },
+        "rocker_linkage_2": {
+            "pos": [0.2166, 0.018, -0.020625],
+            "quat": [0.5, -0.5, 0.5, 0.5]
+        },
+        "rocker_linkage_3": {
+            "pos": [-0.018, -0.2166, 0.020625],
+            "quat": [1.31812e-17, -0.707107, 3.33067e-16, 0.707107]
+        },
+        "rocker_linkage_4": {
+            "pos": [-0.018, 0.2166, 0.020625],
+            "quat": [1.31812e-17, -0.707107, 3.33067e-16, 0.707107]
+        }
+    },
+    "drive_up": {
+        "rocker_linkage": {
+            "pos": [-0.2166, 0.018, -0.020625],
+            "quat": [0.0, 0.0, 0.707107, 0.707107]
+        },
+        "rocker_linkage_2": {
+            "pos": [0.2166, 0.018, -0.020625],
+            "quat": [0.0, 0.0, 0.707107, 0.707107]
+        },
+        "rocker_linkage_3": {
+            "pos": [-0.018, -0.2166, 0.020625],
+            "quat": [-0.5, -0.5, 0.5, 0.5]
+        },
+        "rocker_linkage_4": {
+            "pos": [-0.018, 0.2166, 0.020625],
+            "quat": [-0.5, -0.5, 0.5, 0.5]
+        }
+    }
+}
+
+
+def apply_rocker_configuration(model: mujoco.MjModel, mode: str):
     """
-    Generate patched robot XML file via external generator script.
+    Directly modify rocker linkage body positions and orientations in the model.
     
     Args:
+        model: MuJoCo model to modify
         mode: "sideways" or "drive_up"
+    """
+    if mode not in ROCKER_CONFIGS:
+        raise ValueError(f"Unknown mode: {mode}. Must be 'sideways' or 'drive_up'")
+    
+    config = ROCKER_CONFIGS[mode]
+    
+    for body_name, transform in config.items():
+        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body_id < 0:
+            print(f"[WARNING] Body '{body_name}' not found in model")
+            continue
         
-    Returns:
-        Path to generated XML file
-    """
-    script_path = Path(__file__).parent / "generate_test_magnet_wall_env.py"
-    if not script_path.exists():
-        raise FileNotFoundError(f"Cannot find generator script: {script_path}")
-    
-    # Generate unique filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    pid = os.getpid()
-    output_file = f"robot_sally_patched_{timestamp}_pid{pid}.xml"
-    
-    # Run generator with environment variables
-    env = os.environ.copy()
-    env["MODE"] = mode
-    env["OUTPUT_FILE"] = output_file
-    env["NO_AUTOLAUNCH"] = "1"
-    
-    # print(f"[INFO] Generating patched robot XML (MODE={mode}) -> {output_file}")
-    subprocess.run([sys.executable, str(script_path)], check=True, env=env)
-    
-    return output_file
-
-
-def generate_scene_with_robot(patched_robot_file: str) -> str:
-    """
-    Create temporary scene.xml that includes the specified patched robot file.
-    
-    Args:
-        patched_robot_file: Path to patched robot XML
+        # Set position (body_pos is indexed by body_id)
+        model.body_pos[body_id] = transform["pos"]
         
-    Returns:
-        Path to temporary scene file
-    """
-    import xml.etree.ElementTree as ET
-    
-    # Parse original scene
-    scene_tree = ET.parse("scene.xml")
-    scene_root = scene_tree.getroot()
-    
-    # Update include element
-    patched_robot_filename = Path(patched_robot_file).name
-    for elem in scene_root.iter():
-        if elem.tag == "include":
-            old_file = elem.get("file", "")
-            if "robot_sally_patched" in old_file:
-                elem.set("file", patched_robot_filename)
-                break
-    
-    # Write temporary scene
-    temp_scene_file = f"scene_{Path(patched_robot_file).stem}.xml"
-    ET.indent(scene_tree, space="  ")
-    scene_tree.write(temp_scene_file, encoding="utf-8", xml_declaration=True)
-    
-    return temp_scene_file
+        # Set quaternion (body_quat is indexed by body_id)
+        model.body_quat[body_id] = transform["quat"]
 
 
 # =============================================================================
@@ -187,7 +190,10 @@ def build_model(config: Dict[str, Any]) -> Tuple[mujoco.MjModel, Dict[str, Any]]
         (model, ids) where ids contains resolved entity IDs
     """
     model = mujoco.MjModel.from_xml_path(config["xml_file"])
-    
+
+    # Apply rocker configuration if mode is specified
+    if "mode" in config:
+        apply_rocker_configuration(model, config["mode"])
     # Configure solver
     model.opt.timestep = float(config["timestep"])
     model.opt.integrator = config["integrator"]
@@ -476,196 +482,184 @@ def rollout(
     rollout_mode = params.get("rollout_mode", "drive")
     xml_mode = params.get("mode", "sideways")
     
-    # Generate XML files
-    patched_robot_file = run_xml_generator(mode=xml_mode)
-    temp_scene_file = generate_scene_with_robot(patched_robot_file)
-    cfg["xml_file"] = temp_scene_file
+    # Add mode to config for rocker configuration
+    cfg["mode"] = xml_mode
+    
+    # Build model and initialize data
+    model, ids = build_model(cfg)
+    params_applied = apply_params(model, params, cfg)
+    data = reset_data(model, cfg)
+    
+    # Extract parameters
+    dt = model.opt.timestep
+    Br = params.get("Br", cfg["Br"])
+    magnet_volume = params.get("magnet_volume", cfg["magnet_volume"])
+    MU_0 = params.get("MU_0", cfg["MU_0"])
+    max_magnetic_distance = params.get("max_magnetic_distance", cfg["max_magnetic_distance"])
+    n_wheels = max(1, len(ids["wheel_body_ids"]))
+    max_force_per_wheel = cfg["max_total_force"] / n_wheels
+        
+    # =====================================================================
+    # SETTLING PHASE: Let robot fall and attach before main simulation
+    # =====================================================================
+    settle_steps = int(settle_time / dt)
+    fromto = np.zeros(6)
+    
+    # print(f"[SETTLING] Running {settle_steps} steps ({settle_time}s) to let robot settle...")
+    for _ in range(settle_steps):
+        # Apply magnetic forces (no wheel control)
+        for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
+            data.xfrc_applied[bid, :3] = 0.0
+            dist = mujoco.mj_geomDistance(model, data, gid, ids["wall_id"], 50, fromto)
+            
+            # Check distance threshold
+            if dist >= 0 and dist <= max_magnetic_distance:
+                n = fromto[3:6] - fromto[0:3]
+                norm = np.linalg.norm(n)
+                if norm > 1e-9:
+                    fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
+                    fmag = np.clip(fmag, 0.0, max_force_per_wheel)
+                    fvec = fmag * (n / norm)
+                    data.xfrc_applied[bid, :3] = fvec
+        
+        mujoco.mj_step(model, data)
+        
+        # print(f"[SETTLING] Complete. Starting main simulation...")
+        
+    # =====================================================================
+    # MAIN SIMULATION
+    # =====================================================================
+    n_steps = int(np.ceil(sim_duration / dt))
+    step_records: List[Dict[str, Any]] = []
+    trajectory = []
+    termination = "ok"
+    total_force_accum = 0.0
+    force_samples = 0
+    k = -1
+    
+    metric_cfg = MetricConfig(mode=rollout_mode)
+    target_speed = cfg.get("target_wheel_speed_rad_s", 5.0)
+    distance_threshold = 0.03  # Fixed threshold for contact detection in metrics
     
     try:
-        # Build model and initialize data
-        model, ids = build_model(cfg)
-        params_applied = apply_params(model, params, cfg)
-        data = reset_data(model, cfg)
-        
-        # Extract parameters
-        dt = model.opt.timestep
-        Br = params.get("Br", cfg["Br"])
-        magnet_volume = params.get("magnet_volume", cfg["magnet_volume"])
-        MU_0 = params.get("MU_0", cfg["MU_0"])
-        max_magnetic_distance = params.get("max_magnetic_distance", cfg["max_magnetic_distance"])
-        n_wheels = max(1, len(ids["wheel_body_ids"]))
-        max_force_per_wheel = cfg["max_total_force"] / n_wheels
-        
-        # =====================================================================
-        # SETTLING PHASE: Let robot fall and attach before main simulation
-        # =====================================================================
-        settle_steps = int(settle_time / dt)
-        fromto = np.zeros(6)
-        
-        # print(f"[SETTLING] Running {settle_steps} steps ({settle_time}s) to let robot settle...")
-        for _ in range(settle_steps):
-            # Apply magnetic forces (no wheel control)
-            for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
+        for k in range(n_steps):
+            # Clear forces
+            for bid in ids["wheel_body_ids"]:
                 data.xfrc_applied[bid, :3] = 0.0
+            
+            total_force = np.zeros(3)
+            wheel_forces = {}
+            wheel_dists = []
+            
+            # Magnetic force computation
+            for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
                 dist = mujoco.mj_geomDistance(model, data, gid, ids["wall_id"], 50, fromto)
                 
-                # Check distance threshold
+                # PHYSICS: Apply magnetic force if within max_magnetic_distance
                 if dist >= 0 and dist <= max_magnetic_distance:
                     n = fromto[3:6] - fromto[0:3]
                     norm = np.linalg.norm(n)
                     if norm > 1e-9:
                         fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
                         fmag = np.clip(fmag, 0.0, max_force_per_wheel)
+                        wheel_forces[name] = float(fmag)
+                        
                         fvec = fmag * (n / norm)
                         data.xfrc_applied[bid, :3] = fvec
-            
-            mujoco.mj_step(model, data)
-        
-        # print(f"[SETTLING] Complete. Starting main simulation...")
-        
-        # =====================================================================
-        # MAIN SIMULATION
-        # =====================================================================
-        n_steps = int(np.ceil(sim_duration / dt))
-        step_records: List[Dict[str, Any]] = []
-        trajectory = []
-        termination = "ok"
-        total_force_accum = 0.0
-        force_samples = 0
-        k = -1
-        
-        metric_cfg = MetricConfig(mode=rollout_mode)
-        target_speed = cfg.get("target_wheel_speed_rad_s", 5.0)
-        distance_threshold = 0.03  # Fixed threshold for contact detection in metrics
-        
-        try:
-            for k in range(n_steps):
-                # Clear forces
-                for bid in ids["wheel_body_ids"]:
-                    data.xfrc_applied[bid, :3] = 0.0
-                
-                total_force = np.zeros(3)
-                wheel_forces = {}
-                wheel_dists = []
-                
-                # Magnetic force computation
-                for name, gid, bid in zip(ids["wheel_names"], ids["wheel_geom_ids"], ids["wheel_body_ids"]):
-                    dist = mujoco.mj_geomDistance(model, data, gid, ids["wall_id"], 50, fromto)
-                    
-                    # PHYSICS: Apply magnetic force if within max_magnetic_distance
-                    if dist >= 0 and dist <= max_magnetic_distance:
-                        n = fromto[3:6] - fromto[0:3]
-                        norm = np.linalg.norm(n)
-                        if norm > 1e-9:
-                            fmag = calculate_magnetic_force(dist, Br, magnet_volume, MU_0)
-                            fmag = np.clip(fmag, 0.0, max_force_per_wheel)
-                            wheel_forces[name] = float(fmag)
-                            
-                            fvec = fmag * (n / norm)
-                            data.xfrc_applied[bid, :3] = fvec
-                            total_force += fvec
-                        else:
-                            wheel_forces[name] = 0.0
+                        total_force += fvec
                     else:
                         wheel_forces[name] = 0.0
-                    
-                    # METRICS: Record contact status for metrics (uses fixed threshold)
-                    if dist >= 0 and dist <= distance_threshold:
-                        wheel_dists.append(float(dist))  # "In contact" for metrics
-                    else:
-                        wheel_dists.append(float("inf"))  # "Detached" for metrics
+                else:
+                    wheel_forces[name] = 0.0
                 
-                # Position control (wheels spin at constant rate)
+                # METRICS: Record contact status for metrics (uses fixed threshold)
+                if dist >= 0 and dist <= distance_threshold:
+                    wheel_dists.append(float(dist))  # "In contact" for metrics
+                else:
+                    wheel_dists.append(float("inf"))  # "Detached" for metrics
+            
+            # Position control (wheels spin at constant rate in drive mode only)
+            if rollout_mode == "drive":
                 for aid in ids["wheel_actuator_ids"]:
                     data.ctrl[aid] = data.time * target_speed
+            
+            # Step simulation
+            mujoco.mj_step(model, data)
+            
+            # Check stability
+            if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():
+                termination = "unstable"
+                break
+            
+            # Record step data for metrics
+            step_records.append({
+                "time": float(data.time),
+                "base_pos": data.qpos[:3].copy(),
+                "wheel_dists": list(wheel_dists),
+            })
+            
+            # Downsampled trajectory logging
+            if k % log_stride == 0 or k == n_steps - 1:
+                wheel_vels = {}
+                for name, aid in zip(ids["wheel_names"], ids["wheel_actuator_ids"]):
+                    joint_id = model.actuator_trnid[aid][0]
+                    dof_adr = model.jnt_dofadr[joint_id]
+                    wheel_vels[name] = float(data.qvel[dof_adr])
                 
-                # Step simulation
-                mujoco.mj_step(model, data)
-                
-                # Check stability
-                if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():
-                    termination = "unstable"
-                    break
-                
-                # Record step data for metrics
-                step_records.append({
+                trajectory.append({
                     "time": float(data.time),
-                    "base_pos": data.qpos[:3].copy(),
-                    "wheel_dists": list(wheel_dists),
+                    "qpos": data.qpos[:7].copy(),
+                    "qvel": data.qvel[:6].copy(),
+                    "total_force": total_force.copy(),
+                    "wheel_forces": wheel_forces,
+                    "wheel_velocities": wheel_vels,
                 })
-                
-                # Downsampled trajectory logging
-                if k % log_stride == 0 or k == n_steps - 1:
-                    wheel_vels = {}
-                    for name, aid in zip(ids["wheel_names"], ids["wheel_actuator_ids"]):
-                        joint_id = model.actuator_trnid[aid][0]
-                        dof_adr = model.jnt_dofadr[joint_id]
-                        wheel_vels[name] = float(data.qvel[dof_adr])
-                    
-                    trajectory.append({
-                        "time": float(data.time),
-                        "qpos": data.qpos[:7].copy(),
-                        "qvel": data.qvel[:6].copy(),
-                        "total_force": total_force.copy(),
-                        "wheel_forces": wheel_forces,
-                        "wheel_velocities": wheel_vels,
-                    })
-                
-                total_force_accum += np.linalg.norm(total_force)
-                force_samples += 1
-        
-        except Exception as e:
-            print(f"[ERROR] Simulation crashed: {e}")
-            import traceback
-            traceback.print_exc()
-            termination = "unstable"
-        
-        # =====================================================================
-        # COMPUTE METRICS
-        # =====================================================================
-        metrics_result = compute_metrics(step_records, metric_cfg)
-        
-        summary = {
-            "final_base_position": data.qpos[:3].copy().tolist(),
-            "avg_total_magnetic_force": total_force_accum / max(1, force_samples),
-            "reward": metrics_result["reward"],
-            "progress_m": metrics_result["progress_m"],
-            "progress_rate_mps": metrics_result["progress_rate_mps"],
-            "detached": metrics_result["detached"],
-            "stuck": metrics_result["stuck"],
-            "slip_m": metrics_result["slip_m"],
-            "contact_percentage": metrics_result.get("contact_percentage", None),
-            "detachment_fraction": metrics_result.get("detachment_fraction", None),
-        }
-        
-        if metrics_result["termination_reason"] != "ok":
-            termination = metrics_result["termination_reason"]
-        
-        return RolloutResult(
-            termination=termination,
-            steps=max(0, k + 1),
-            sim_time=float(data.time),
-            trajectory=trajectory,
-            summary=summary,
-            params_applied={
-                **params_applied,
-                "Br": Br,
-                "magnet_volume": magnet_volume,
-                "MU_0": MU_0,
-                "max_magnetic_distance": max_magnetic_distance,
-                "target_wheel_speed_rad_s": target_speed,
-            },
-        )
+            
+            total_force_accum += np.linalg.norm(total_force)
+            force_samples += 1
     
-    finally:
-        # Clean up temporary files
-        try:
-            Path(temp_scene_file).unlink()
-            Path(patched_robot_file).unlink()
-            # print(f"[CLEANUP] Removed {patched_robot_file}")
-
-        except Exception:
-            pass
+    except Exception as e:
+        print(f"[ERROR] Simulation crashed: {e}")
+        import traceback
+        traceback.print_exc()
+        termination = "unstable"
+    
+    # =====================================================================
+    # COMPUTE METRICS
+    # =====================================================================
+    metrics_result = compute_metrics(step_records, metric_cfg)
+    
+    summary = {
+        "final_base_position": data.qpos[:3].copy().tolist(),
+        "avg_total_magnetic_force": total_force_accum / max(1, force_samples),
+        "reward": metrics_result["reward"],
+        "progress_m": metrics_result["progress_m"],
+        "progress_rate_mps": metrics_result["progress_rate_mps"],
+        "detached": metrics_result["detached"],
+        "stuck": metrics_result["stuck"],
+        "slip_m": metrics_result["slip_m"],
+        "contact_percentage": metrics_result.get("contact_percentage", None),
+        "detachment_fraction": metrics_result.get("detachment_fraction", None),
+    }
+    
+    if metrics_result["termination_reason"] != "ok":
+        termination = metrics_result["termination_reason"]
+    
+    return RolloutResult(
+        termination=termination,
+        steps=max(0, k + 1),
+        sim_time=float(data.time),
+        trajectory=trajectory,
+        summary=summary,
+        params_applied={
+            **params_applied,
+            "Br": Br,
+            "magnet_volume": magnet_volume,
+            "MU_0": MU_0,
+            "max_magnetic_distance": max_magnetic_distance,
+            "target_wheel_speed_rad_s": target_speed,
+        },
+    )
 
 
 # =============================================================================
