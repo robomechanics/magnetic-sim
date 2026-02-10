@@ -1,139 +1,74 @@
 """
-replay.py
-
-Pure wrapper around viewer.py.
-
-- Loads logs/*/replay_params.json
-- Sets viewer.INSPECT_PARAMS
-- Calls viewer.main()
-
-Usage:
-    python replay.py                          # Interactive selection
-    python replay.py logs/stage3_run1         # Replay specific experiment
-    python replay.py logs/stage3_run1 --mode hold
-    python replay.py --list
+replay.py - Quick replay of optimization results
+Usage: python replay.py [--rank RANK] [--duration DURATION]
 """
 
-import json
-from pathlib import Path
-from typing import Dict, Any, Optional
+import csv
 import argparse
-
 import viewer
 
-
-def load_replay_params(replay_file: Path) -> Dict[str, Any]:
-    with replay_file.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def list_available_replays(logs_dir: Path = Path("logs")) -> list[Path]:
-    if not logs_dir.exists():
-        return []
-    replay_files = list(logs_dir.glob("*/replay_params.json"))
-    return sorted(replay_files, key=lambda p: p.stat().st_mtime, reverse=True)
-
-
-def fmt(x) -> str:
-    if x is None:
-        return "N/A"
-    try:
-        return f"{float(x):.3f}"
-    except Exception:
-        return str(x)
-
-
-def print_one_line_summary(exp_name: str, data: Dict[str, Any]) -> str:
-    r = fmt(data.get("reward"))
-    rh = fmt(data.get("reward_hold"))
-    rd = fmt(data.get("reward_drive"))
-    ts = data.get("timestamp", "N/A")
-    return f"{exp_name} (reward={r}, hold={rh}, drive={rd}, {ts})"
-
-
-def apply_mode_overrides(params: Dict[str, Any], mode: Optional[str]) -> Dict[str, Any]:
-    """
-    Minimal override: only set mode/rollout_mode when user asks.
-    Otherwise don't force two-mode execution.
-    """
-    out = dict(params)
-    if mode == "hold":
-        out["mode"] = "sideways"
-        out["rollout_mode"] = "hold"
-    elif mode == "drive":
-        out["mode"] = "drive_up"
-        out["rollout_mode"] = "drive"
-    return out
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Replay optimized simulations (pure viewer wrapper)")
-    parser.add_argument("experiment", nargs="?", help="Path to experiment directory (e.g., logs/stage3_run1)")
-    parser.add_argument("--mode", choices=["hold", "drive"], help="Override mode/rollout_mode once, then run viewer")
-    parser.add_argument("--list", action="store_true", help="List available replays and exit")
+    parser = argparse.ArgumentParser(description="Replay optimization result")
+    parser.add_argument("--rank", type=int, default=1, help="Rank to replay (1=best)")
+    parser.add_argument("--duration", type=float, default=10.0, help="Duration (s)")
     args = parser.parse_args()
-
-    # list
-    if args.list:
-        replays = list_available_replays()
-        if not replays:
-            print("No replay files found in logs/")
-            return
-        print("\nAvailable replays:")
-        for i, rp in enumerate(replays, 1):
-            exp_name = rp.parent.name
-            try:
-                data = load_replay_params(rp)
-                print(f"{i}. {print_one_line_summary(exp_name, data)}")
-            except Exception as e:
-                print(f"{i}. {exp_name} (error loading: {e})")
-        return
-
-    # choose replay file
-    if args.experiment is None:
-        replays = list_available_replays()
-        if not replays:
-            print("No replay files found in logs/")
-            return
-
-        print("\nAvailable replays:")
-        for i, rp in enumerate(replays, 1):
-            exp_name = rp.parent.name
-            try:
-                data = load_replay_params(rp)
-                print(f"{i}. {print_one_line_summary(exp_name, data)}")
-            except Exception as e:
-                print(f"{i}. {exp_name} (error loading: {e})")
-
+    
+    # Ask user: original or optimized params
+    print("\n1. Use optimized parameters from CSV")
+    print("2. Use default/original parameters")
+    choice = input("Select (1 or 2): ").strip()
+    
+    if choice == "2":
+        # Default parameters
+        print("\nUsing default parameters...")
+        params = {
+            'ground_friction': [0.95, 0.01, 0.01],
+            'solref': [0.0004, 25.0],
+            'solimp': [0.9, 0.95, 0.001, 0.5, 1.0],
+            'noslip_iterations': 15,
+            'rocker_stiffness': 30.0,
+            'rocker_damping': 1.0,
+            'wheel_kp': 10.0,
+            'wheel_kv': 1.0,
+            'Br': 1.48,
+            'max_magnetic_distance': 0.01
+        }
+        viewer.visualize_simulation(params, args.duration)
+        
+    elif choice == "1":
+        # Load from CSV
         try:
-            choice = int(input("\nSelect replay number: ")) - 1
-            if choice < 0 or choice >= len(replays):
-                print("Invalid selection")
-                return
-            replay_file = replays[choice]
-        except (ValueError, KeyboardInterrupt):
-            print("\nCancelled")
+            with open('optimization_results.csv', 'r') as f:
+                results = list(csv.DictReader(f))
+        except FileNotFoundError:
+            print("Error: optimization_results.csv not found.")
             return
+        
+        if args.rank > len(results):
+            print(f"Error: Rank {args.rank} out of bounds (max: {len(results)})")
+            return
+        
+        s = results[args.rank - 1]
+        print(f"\nReplaying Rank #{args.rank}")
+        print(f"Cost: {float(s['cost']):.6f} | Movement: {float(s['total_movement']):.4f} m\n")
+        
+        params = {
+            'ground_friction': [float(s['sliding_friction']), float(s['torsional_friction']), float(s['rolling_friction'])],
+            'solref': [float(s['solref_timeconst']), float(s['solref_dampratio'])],
+            'solimp': [float(s['solimp_dmin']), float(s['solimp_dmax']), float(s['solimp_width']), 0.5, 1.0],
+            'noslip_iterations': int(s['noslip_iterations']),
+            'Br': float(s['Br']),
+            'max_magnetic_distance': float(s['max_magnetic_distance']),
+            'rocker_stiffness': float(s['rocker_stiffness']),
+            'rocker_damping': float(s['rocker_damping']),
+            'wheel_kp': float(s['wheel_kp']),
+            'wheel_kv': float(s['wheel_kv']),
+        }
+        
+        viewer.visualize_simulation(params, args.duration)
+        
     else:
-        exp_path = Path(args.experiment)
-        replay_file = exp_path / "replay_params.json"
-        if not replay_file.exists():
-            print(f"Replay file not found: {replay_file}")
-            return
-
-    # load
-    replay_data = load_replay_params(replay_file)
-    params = replay_data.get("parameters", {})
-    if not isinstance(params, dict):
-        raise ValueError("replay_params.json: 'parameters' must be a dict")
-
-    # minimal override (optional)
-    final_params = apply_mode_overrides(params, args.mode)
-
-    # PURE: only set INSPECT_PARAMS, then call viewer
-    viewer.INSPECT_PARAMS = final_params
-    viewer.main()
-
+        print("Invalid choice. Exiting.")
 
 if __name__ == "__main__":
     main()
