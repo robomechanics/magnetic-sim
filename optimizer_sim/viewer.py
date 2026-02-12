@@ -44,8 +44,15 @@ def key_callback(keycode):
     elif keycode == 257:  # enter
         key_state["paused"] = False
 
-def visualize_simulation(params, sim_duration=10.0):
+def visualize_simulation(params, sim_duration=None, mode=None):
     """Run simulation with visualization (arrows, viewer)."""
+    from config import MODES, DEFAULT_MODE
+    if mode is None:
+        mode = DEFAULT_MODE
+    mode_cfg = MODES[mode]
+    if sim_duration is None:
+        sim_duration = mode_cfg["sim_duration"]
+
     model = mujoco.MjModel.from_xml_path("XML/scene.xml")
     
     # Apply parameters (same as sim_optimizer.run_simulation)
@@ -82,7 +89,6 @@ def visualize_simulation(params, sim_duration=10.0):
     max_mag_dist = params.get('max_magnetic_distance', 0.01)
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
-    # TODO: Alternative simpler method - use cylinder center only (4 geoms instead of 96)
     wheel_gids = []
     for wheel_prefix in ['BR', 'FR', 'BL', 'FL']:
         # Find the wheel_geom body
@@ -97,7 +103,14 @@ def visualize_simulation(params, sim_duration=10.0):
                 if model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_SPHERE:
                     wheel_gids.append(geom_id)
 
-    fromto = np.zeros(6)  # Add this - was missing!
+    # Collect wheel actuator IDs for control
+    wheel_act_ids = []
+    for act_name in ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']:
+        act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+        if act_id != -1:
+            wheel_act_ids.append(act_id)
+
+    fromto = np.zeros(6)
     
     mujoco.mj_step(model, data)
     
@@ -141,18 +154,14 @@ def visualize_simulation(params, sim_duration=10.0):
                             arrow_len = 0.002 * fmag / 10.0
                             add_arrow(viewer.user_scn, fromto[0:3], fromto[0:3] + arrow_len * n_hat, (0, 0, 1, 1))
                 
-                # # Red arrows for wheel angular velocity
-                # for gid in wheel_gids:
-                #     if gid == -1:
-                #         continue
-                #     bid = model.geom_bodyid[gid]
-                #     vel = data.qvel[model.body_dofadr[bid]:model.body_dofadr[bid]+6]
-                #     ang_vel = vel[3:6]
-                #     ang_speed = np.linalg.norm(ang_vel)
-                #     if ang_speed > 0.1:
-                #         arrow_len = 0.01 * ang_speed
-                #         add_arrow(viewer.user_scn, data.xpos[bid], data.xpos[bid] + arrow_len * ang_vel/ang_speed, (1, 0, 0, 1))
-                
+                # Actuator control
+                if mode_cfg["actuator_mode"] == "velocity":
+                    for act_id in wheel_act_ids:
+                        data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time
+                else:
+                    for act_id in wheel_act_ids:
+                        data.ctrl[act_id] = mode_cfg["actuator_target"]
+
                 mujoco.mj_step(model, data)
             
             viewer.sync()
@@ -161,12 +170,13 @@ def visualize_simulation(params, sim_duration=10.0):
 def main():
     parser = argparse.ArgumentParser(description="Visualize optimization results")
     parser.add_argument("--rank", type=int, default=1, help="Rank to visualize (1=best)")
-    parser.add_argument("--duration", type=float, default=10.0, help="Simulation duration (s)")
+    parser.add_argument("--duration", type=float, default=None, help="Simulation duration (s)")
+    parser.add_argument("--mode", type=str, default="hold", help="Mode: hold, drive_sideways")
     args = parser.parse_args()
     
     # Load results from CSV
     try:
-        with open('optimization_results.csv', 'r') as f:
+        with open(f'optimization_results_{args.mode}.csv', 'r') as f:
             results = list(csv.DictReader(f))
     except FileNotFoundError:
         print("Error: optimization_results.csv not found. Run tune_params.py first.")
@@ -178,7 +188,7 @@ def main():
     
     s = results[args.rank - 1]
     print(f"\nRank #{args.rank}")
-    print(f"Cost: {float(s['cost']):.6f} | Movement: {float(s['total_movement']):.4f} m")
+    print(f"Cost: {float(s['cost']):.6f}")
     
     # Reconstruct parameters
     params = {
@@ -194,7 +204,7 @@ def main():
         'wheel_kv': float(s['wheel_kv']),
     }
     
-    visualize_simulation(params, args.duration)
+    visualize_simulation(params, args.duration, mode=args.mode)
 
 
 if __name__ == "__main__":

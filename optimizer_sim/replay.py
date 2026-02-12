@@ -1,6 +1,6 @@
 """
 replay.py - Quick replay of optimization results
-Usage: python replay.py [--rank RANK] [--duration DURATION]
+Usage: python replay.py [--rank RANK] [--duration DURATION] [--mode MODE]
 """
 
 import csv
@@ -10,7 +10,8 @@ import viewer
 def main():
     parser = argparse.ArgumentParser(description="Replay optimization result")
     parser.add_argument("--rank", type=int, default=1, help="Rank to replay (1=best)")
-    parser.add_argument("--duration", type=float, default=10.0, help="Duration (s)")
+    parser.add_argument("--duration", type=float, default=None, help="Duration (s)")
+    parser.add_argument("--mode", type=str, default="hold", help="Mode: hold, drive_sideways")
     args = parser.parse_args()
     
     # Ask user: original or optimized params
@@ -33,15 +34,15 @@ def main():
             'Br': 1.48,
             'max_magnetic_distance': 0.01
         }
-        viewer.visualize_simulation(params, args.duration)
+        viewer.visualize_simulation(params, args.duration, mode=args.mode)
         
     elif choice == "1":
         # Load from CSV
         try:
-            with open('optimization_results.csv', 'r') as f:
+            with open(f'optimization_results_{args.mode}.csv', 'r') as f:
                 results = list(csv.DictReader(f))
         except FileNotFoundError:
-            print("Error: optimization_results.csv not found.")
+            print(f"Error: optimization_results_{args.mode}.csv not found.")
             return
         
         if args.rank > len(results):
@@ -50,7 +51,7 @@ def main():
         
         s = results[args.rank - 1]
         print(f"\nReplaying Rank #{args.rank}")
-        print(f"Cost: {float(s['cost']):.6f} | Movement: {float(s['total_movement']):.4f} m\n")
+        print(f"Cost: {float(s['cost']):.6f}\n")
         
         params = {
             'ground_friction': [float(s['sliding_friction']), float(s['torsional_friction']), float(s['rolling_friction'])],
@@ -65,7 +66,7 @@ def main():
             'wheel_kv': float(s['wheel_kv']),
         }
         
-        viewer.visualize_simulation(params, args.duration)
+        viewer.visualize_simulation(params, args.duration, mode=args.mode)
         
     else:
         print("Invalid choice. Exiting.")

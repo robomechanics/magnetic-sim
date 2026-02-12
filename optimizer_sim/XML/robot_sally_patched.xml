@@ -14,7 +14,7 @@
   </default>
   <worldbody>
     <body name="magnetic_wall" pos="0.25 0 0.35">
-      <geom name="wall_geom" type="box" size="0.02 0.7 0.7" rgba="0.8 0.8 0.8 1" friction="0.95 0.1 0.1" contype="1" conaffinity="1" />
+      <geom name="wall_geom" type="box" size="0.02 5.0 5.0" rgba="0.8 0.8 0.8 1" friction="0.95 0.1 0.1" contype="1" conaffinity="1" />
     </body>
     <light pos="0 0 2" dir="0 0 -1" directional="true" diffuse="0.8 0.8 0.8" />
     <body name="frame" pos="0.24 0 0.35" quat="0 -0.7071 0 0.7071">

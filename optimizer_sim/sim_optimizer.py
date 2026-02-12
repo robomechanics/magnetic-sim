@@ -8,7 +8,7 @@ import imageio
 import imageio.plugins.ffmpeg
 import pathlib
 
-# TODO: Add max_magnetic_distance to reward we updated reward function with distance %
+from config import MODES, DEFAULT_MODE
 
 # Magnetic constants
 MU_0 = 4 * np.pi * 1e-7  # Magnetic permeability of free space (H/m)
@@ -22,7 +22,7 @@ def calculate_magnetic_force(distance, Br, V, MU_0):
     m = (Br * V) / MU_0
     return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * distance) ** 4)
 
-def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visualize=False):
+def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visualize=False, mode=None):
     """
     Runs a MuJoCo simulation with given parameters and returns the trajectory.
     
@@ -32,9 +32,16 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
     # If visualization requested, delegate to viewer module
     if visualize:
         import viewer
-        viewer.visualize_simulation(params, sim_duration)
+        viewer.visualize_simulation(params, sim_duration, mode=mode)
         return None
     
+    # Mode config
+    if mode is None:
+        mode = DEFAULT_MODE
+    mode_cfg = MODES[mode]
+    if sim_duration is None:
+        sim_duration = mode_cfg["sim_duration"]
+
     # Otherwise run headless simulation
     model = mujoco.MjModel.from_xml_path(mjcf_path)
 
@@ -77,7 +84,7 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
     data.qpos[2] = 0.35               # Z = height along wall
     data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
 
-    settle_time = 0.2
+    settle_time = mode_cfg["settle_time"]
     trajectory = []
     
     # Get parameters for magnetic force
@@ -85,7 +92,6 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
     max_magnetic_distance = params.get('max_magnetic_distance', 0.01)
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
-    # TODO: Alternative simpler method - use cylinder center only (4 geoms instead of 96)
     wheel_gids = []
     for wheel_prefix in ['BR', 'FR', 'BL', 'FL']:
         # Find the wheel_geom body
@@ -100,6 +106,13 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
                 if model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_SPHERE:
                     wheel_gids.append(geom_id)
     
+    # Collect wheel actuator IDs for velocity control
+    wheel_act_ids = []
+    for act_name in ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']:
+        act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+        if act_id != -1:
+            wheel_act_ids.append(act_id)
+
     fromto = np.zeros(6)
 
     try:
@@ -123,7 +136,7 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
                 
                 if dist < 0 or dist > max_magnetic_distance:
                     continue
-                
+                # Calculate magnetic force and apply to the geom
                 fmag = calculate_magnetic_force(dist, Br, MAGNET_VOLUME, MU_0)
                 fmag = np.clip(fmag, 0.0, MAX_FORCE_PER_WHEEL)
 
@@ -131,8 +144,16 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
                 norm = np.linalg.norm(n)
                 if norm > 1e-10:
                     data.xfrc_applied[model.geom_bodyid[gid], :3] = fmag * (n / norm)
-            mujoco.mj_step(model, data)
+            # Actuator control for velocity mode
+            if mode_cfg["actuator_mode"] == "velocity":
+                for act_id in wheel_act_ids:
+                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time
+            else:
+                for act_id in wheel_act_ids:
+                    data.ctrl[act_id] = mode_cfg["actuator_target"]
 
+            mujoco.mj_step(model, data)
+            # Check for instability (non-finite values or solver failures)
             if not np.all(np.isfinite(data.qacc)):
                 raise ValueError("Simulation unstable: Non-finite accelerations.")
             
@@ -165,23 +186,39 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=10.0, visuali
     return trajectory
 
 if __name__ == "__main__":
+    # Raw default
+    # default_params = {
+    #     'ground_friction': [0.95, 0.01, 0.01],
+    #     'solref': [0.0004, 25.0],
+    #     'solimp': [0.9, 0.95, 0.001, 0.5, 1.0],
+    #     'noslip_iterations': 15,
+    #     'rocker_stiffness': 30.0,
+    #     'rocker_damping': 1.0,
+    #     'wheel_kp': 10.0,
+    #     'wheel_kv': 1.0,
+    #     'Br': 1.48
+    # }
+
+    # Optimized hold default
     default_params = {
-        'ground_friction': [0.95, 0.01, 0.01],
-        'solref': [0.0004, 25.0],
-        'solimp': [0.9, 0.95, 0.001, 0.5, 1.0],
-        'noslip_iterations': 15,
-        'rocker_stiffness': 30.0,
-        'rocker_damping': 1.0,
-        'wheel_kp': 10.0,
-        'wheel_kv': 1.0,
-        'Br': 1.48
+        'ground_friction': [0.9876, 0.000592, 0.00001],
+        'solref': [0.0008, 10.0],
+        'solimp': [0.9094, 0.9946, 0.000667, 0.5, 1.0],
+        'noslip_iterations': 28,
+        'rocker_stiffness': 100.0,
+        'rocker_damping': 2.3945,
+        'wheel_kp': 1.1759,
+        'wheel_kv': 5.7573,
+        'Br': 1.628,
+        'max_magnetic_distance': 0.03275,
     }
-    
-    print("Running simulation...")
-    trajectory = run_simulation(default_params, sim_duration=5.0, visualize=True)
+
+    mode = "drive_sideways"
+    print(f"Running simulation (mode={mode})...")
+    trajectory = run_simulation(default_params, visualize=False, mode=mode)
 
     if trajectory:
-        settle_time = 0.2
+        settle_time = MODES[mode]["settle_time"]
         start_idx = next((i for i, s in enumerate(trajectory) if s['time'] >= settle_time), 0)
         
         total_movement = sum(

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import csv
 import uuid
+import argparse
 import sim_optimizer
+from config import MODES, DEFAULT_MODE
 from typing import Dict, Any, List
 
 import numpy as np
@@ -13,7 +15,13 @@ from skopt.utils import use_named_args
 
 all_results = []
 N_CALLS = 100
-TARGET_SLIP = 0.0 # Want 0 meters of slip over the simulation
+
+# Parse mode from CLI
+parser = argparse.ArgumentParser()
+parser.add_argument("--mode", type=str, default=DEFAULT_MODE, choices=MODES.keys())
+args = parser.parse_args()
+MODE = args.mode
+mode_cfg = MODES[MODE]
 
 # 1. Define the search space for the parameters.
 space = [
@@ -47,36 +55,55 @@ space = [
     Integer(5, 30, name='noslip_iterations'),
 ]
 
-def calculate_cost(trajectory, target_slip):
+
+def cost_minimize_slip(trajectory, mode_cfg):
+    """Hold mode: minimize total movement (want zero slip)."""
     if not trajectory:
         return {'total_cost': 1e6, 'total_movement': 0}
 
-    settle_time = 0.2  # Must match the value in sim_optimizer.py
-
-    # Find index where settling ends
+    settle_time = mode_cfg["settle_time"]
     start_idx = 0
     for idx, state in enumerate(trajectory):
         if state['time'] >= settle_time:
             start_idx = idx
             break
 
-    # --- Total Movement Penalty (all X, Y, Z changes) ---
     total_movement = 0
     for i in range(start_idx + 1, len(trajectory)):
         dx = trajectory[i]['pos'][0] - trajectory[i-1]['pos'][0]
         dy = trajectory[i]['pos'][1] - trajectory[i-1]['pos'][1]
         dz = trajectory[i]['pos'][2] - trajectory[i-1]['pos'][2]
-        movement = np.sqrt(dx**2 + dy**2 + dz**2)
-        total_movement += movement
+        total_movement += np.sqrt(dx**2 + dy**2 + dz**2)
 
-    total_cost = abs(total_movement - target_slip)
-    
-    print(f"  Total Movement: {total_movement:.4f} | Total Cost: {total_cost:.4f}")
-
+    total_cost = abs(total_movement - 0.0)  # target = zero slip
+    print(f"  Total Movement: {total_movement:.4f} | Cost: {total_cost:.4f}")
     return {'total_cost': total_cost, 'total_movement': total_movement}
 
+def cost_drive_side(trajectory, mode_cfg):
+    """Drive sideways mode: match average Y velocity to target."""
+    if not trajectory:
+        return {'total_cost': 1e6, 'avg_vel': 0}
 
+    settle_time = mode_cfg["settle_time"]
+    start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
+    end_state = trajectory[-1]
 
+    dt = end_state['time'] - start_state['time']
+    if dt < 1e-6:
+        return {'total_cost': 1e6, 'avg_vel': 0}
+
+    y_disp = end_state['pos'][1] - start_state['pos'][1]
+    avg_vel = y_disp / dt
+    target_vel = mode_cfg["actuator_target_ms"]
+
+    total_cost = abs(avg_vel - target_vel)
+    print(f"  Avg Y vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
+    return {'total_cost': total_cost, 'avg_vel': avg_vel}
+
+COST_FUNCTIONS = {
+    "minimize_slip": cost_minimize_slip,
+    "drive_side": cost_drive_side,
+}
 # 2. Define the objective function to minimize.
 # It takes the parameters, runs the simulation, and returns the error.
 @use_named_args(space)
@@ -117,20 +144,21 @@ def objective(**params):
     }
 
     trajectory = sim_optimizer.run_simulation(
-        sim_params, sim_duration=5.0)
+        sim_params, mode=MODE)
     
     if trajectory is None:
         print("  Simulation unstable. Assigning large penalty.")
-        cost_data = {'total_cost': 1e6, 'total_movement': 0}
+        cost_data = {'total_cost': 1e6}
     else:
-        cost_data = calculate_cost(trajectory, TARGET_SLIP)
+        cost_fn = COST_FUNCTIONS[mode_cfg["cost_function"]]
+        cost_data = cost_fn(trajectory, mode_cfg)
 
     # Store detailed results for this run
     run_id = str(uuid.uuid4().hex)[:8]
     all_results.append({
         'id': run_id,
         'cost': cost_data['total_cost'],
-        'total_movement': cost_data['total_movement'],
+        'cost_data': cost_data,
         'params': params
     })
 
@@ -138,19 +166,20 @@ def objective(**params):
 
 if __name__ == "__main__":
     # 3. Run the optimization.
-    print(f"Running Bayesian optimization for {N_CALLS} iterations...")
-    print(f"Target slip is {TARGET_SLIP} m (minimize total movement).")
+    print(f"Running Bayesian optimization for {N_CALLS} iterations (mode={MODE})...")
+    
+    # Optionally, start from the best known parameters for the "hold" mode to speed up convergence.
+    best_hold_x0 = [1.628, 0.0008, 10.0, 0.9094, 0.9946, 0.000667,
+                     0.9876, 0.000592, 0.00001, 100.0, 2.3945,
+                     1.1759, 5.7573, 0.03275, 28]
     
     result = gp_minimize(
         objective,
         space,
         n_calls=N_CALLS,
         random_state=42,
-        # The optimizer builds a model of the cost function. When it encounters
-        # bad parameters (high cost), it learns to avoid that region and samples
-        # from more promising areas. Increasing n_initial_points gives it a
-        # better starting model.
-        n_initial_points=20
+        n_initial_points=N_CALLS // 5,
+        x0=best_hold_x0, # Start from the best known hold parameters, remove if not working)
     )
 
     # 4. Save results to a CSV file
@@ -159,20 +188,18 @@ if __name__ == "__main__":
         sorted_results = sorted(all_results, key=lambda r: r['cost'])
 
         param_names = [dim.name for dim in space]
-        fieldnames = ['id', 'cost', 'total_movement'] + param_names
+        extra_keys = [k for k in sorted_results[0]['cost_data'].keys() if k != 'total_cost']
+        fieldnames = ['id', 'cost'] + extra_keys + param_names
         try:
-            with open('optimization_results.csv', 'w', newline='') as f:
+            with open(f'optimization_results_{MODE}.csv', 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for res in sorted_results:
-                    row = {
-                        'id': res['id'],
-                        'cost': res['cost'],
-                        'total_movement': res['total_movement']
-                    }
+                    row = {'id': res['id'], 'cost': res['cost']}
+                    row.update({k: res['cost_data'][k] for k in extra_keys})
                     row.update(res['params'])
                     writer.writerow(row)
-            print("\n--- Optimization results saved to optimization_results.csv (sorted by cost) ---")
+            print(f"\n--- Results saved to optimization_results_{MODE}.csv ---")
         except Exception as e:
             print(f"\n--- Could not save optimization results to CSV: {e} ---")
 
@@ -213,11 +240,11 @@ if __name__ == "__main__":
         'wheel_kv': best_result['params']['wheel_kv'],
     }
     
-    print(f"Best cost: {best_result['cost']:.6f}, Total movement: {best_result['total_movement']:.4f} m")
+    print(f"Best cost: {best_result['cost']:.6f}")
     print("Launching viewer...")
     
     sim_optimizer.run_simulation(
         best_sim_params,
-        sim_duration=10.0,
-        visualize=True
+        visualize=True,
+        mode=MODE
     )
