@@ -197,9 +197,9 @@
     <position name="FR_pivot" joint="FR_pivot" kp="20" kv="10" />
     <position name="BL_pivot" joint="BL_pivot" kp="20" kv="10" />
     <position name="FL_pivot" joint="FL_pivot" kp="20" kv="10" />
-    <position name="BR_wheel_motor" joint="BR_wheel" kp="10.0" kv="1.0" ctrlrange="-100 100" />
-    <position name="FR_wheel_motor" joint="FR_wheel" kp="10.0" kv="1.0" ctrlrange="-100 100" />
-    <position name="BL_wheel_motor" joint="BL_wheel" kp="10.0" kv="1.0" ctrlrange="-100 100" />
-    <position name="FL_wheel_motor" joint="FL_wheel" kp="10.0" kv="1.0" ctrlrange="-100 100" />
+    <position name="BR_wheel_motor" joint="BR_wheel" kp="10.0" kv="1.0" ctrlrange="-10000 10000" />
+    <position name="FR_wheel_motor" joint="FR_wheel" kp="10.0" kv="1.0" ctrlrange="-10000 10000" />
+    <position name="BL_wheel_motor" joint="BL_wheel" kp="10.0" kv="1.0" ctrlrange="-10000 10000" />
+    <position name="FL_wheel_motor" joint="FL_wheel" kp="10.0" kv="1.0" ctrlrange="-10000 10000" />
   </actuator>
 </mujoco>
