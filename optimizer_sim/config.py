@@ -12,25 +12,39 @@ WHEEL_RADIUS = 0.025  # meters, from XML cylinder geom
 
 MODES = {
     "hold": {
-        "actuator_mode": "position",
+        # this means we will set a constant position target (0) for the wheel joints to hold them in place
+        # not actuator type 
+        "actuator_mode": "position", 
         "actuator_target": 0.0,
         "cost_function": "minimize_slip",
         "sim_duration": 5.0,
         "settle_time": 0.2,
-        "target_slip": 0.0,
+        "pivot_angle": 1.5708,            # np.pi/2 - wheels sideways
     },
     "drive_sideways": {
+        # velocity is a position ramp
+        # produces approximately constant velocity behavior, because the PD controller is always “chasing” a moving angle target.
         "actuator_mode": "velocity",
-        "actuator_target_ms": 2.0,        # m/s linear velocity
+        "actuator_target_ms": 2.0,
         "cost_function": "drive_side",
         "sim_duration": 10.0,
         "settle_time": 0.2,
+        "pivot_angle": 1.5708,            # np.pi/2 - wheels sideways
+    },
+    "drive_up": {
+        "actuator_mode": "velocity",
+        "actuator_target_ms": 2.0,
+        "cost_function": "drive_up",
+        "sim_duration": 10.0,
+        "settle_time": 0.2,
+        "pivot_angle": -1.5708,              # wheels forward (drive up)
     },
 }
 
 # Derived: convert m/s -> rad/s for the drive target
-MODES["drive_sideways"]["actuator_target_rads"] = (
-    MODES["drive_sideways"]["actuator_target_ms"] / WHEEL_RADIUS
-)
+for mode_name in ["drive_sideways", "drive_up"]:
+    MODES[mode_name]["actuator_target_rads"] = (
+        MODES[mode_name]["actuator_target_ms"] / WHEEL_RADIUS
+    )
 
-DEFAULT_MODE = "drive_sideways"
+DEFAULT_MODE = "drive_up"

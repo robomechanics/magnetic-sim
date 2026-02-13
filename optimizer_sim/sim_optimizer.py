@@ -118,12 +118,14 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
     try:
         mujoco.mj_step(model, data)
 
-        # Set wheels sideways
+        # Set pivot angle from mode config and lock it
         pivot_joints = ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
         for joint_name in pivot_joints:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             if joint_id != -1:
-                data.qpos[model.jnt_qposadr[joint_id]] = np.pi/2
+                data.qpos[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
+                model.jnt_stiffness[joint_id] = 1000.0
+                model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
 
         def simulation_step():
             data.xfrc_applied[:] = 0.0 
@@ -144,13 +146,13 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                 norm = np.linalg.norm(n)
                 if norm > 1e-10:
                     data.xfrc_applied[model.geom_bodyid[gid], :3] = fmag * (n / norm)
-            # Actuator control for velocity mode
-            if mode_cfg["actuator_mode"] == "velocity":
+            # Ramped position reference mode 
+            if mode_cfg["actuator_mode"] == "velocity": # Apply target velocity ramp
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time
+                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time # qpos target = velocity(m/s) * time (ramp)
             else:
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = mode_cfg["actuator_target"]
+                    data.ctrl[act_id] = mode_cfg["actuator_target"] # Position control target (0 for hold mode)
 
             mujoco.mj_step(model, data)
             # Check for instability (non-finite values or solver failures)
@@ -213,7 +215,7 @@ if __name__ == "__main__":
         'max_magnetic_distance': 0.03275,
     }
 
-    mode = "drive_sideways"
+    mode = DEFAULT_MODE
     print(f"Running simulation (mode={mode})...")
     trajectory = run_simulation(default_params, visualize=False, mode=mode)
 

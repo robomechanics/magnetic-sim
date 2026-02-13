@@ -113,20 +113,25 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     fromto = np.zeros(6)
     
     mujoco.mj_step(model, data)
-    
-    # Set wheels sideways
-    for joint_name in ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']:
-        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-        if jid != -1:
-            data.qpos[model.jnt_qposadr[jid]] = np.pi/2
-    
+        
+    # Set pivot angle from mode config and lock it
+    pivot_joints = ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
+    for joint_name in pivot_joints:
+        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        if joint_id != -1:
+            data.qpos[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
+            model.jnt_stiffness[joint_id] = 1000.0
+            model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
+
     print(f"\nViewer - Press ENTER to start, SPACE to play/pause")
     print(f"Br: {Br:.3f} T | Max dist: {max_mag_dist*1000:.1f} mm | Duration: {sim_duration}s\n")
     
     with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
         viewer.cam.trackbodyid = 1
-        viewer.cam.distance = 0.15
+        viewer.cam.distance = 8.0
+        viewer.cam.azimuth = 45
+        viewer.cam.elevation = -45
         
         while viewer.is_running() and data.time < sim_duration:
             if not key_state["paused"]:

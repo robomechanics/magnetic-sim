@@ -14,7 +14,7 @@ from skopt.utils import use_named_args
 
 
 all_results = []
-N_CALLS = 100
+N_CALLS = 10
 
 # Parse mode from CLI
 parser = argparse.ArgumentParser()
@@ -100,10 +100,33 @@ def cost_drive_side(trajectory, mode_cfg):
     print(f"  Avg Y vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
     return {'total_cost': total_cost, 'avg_vel': avg_vel}
 
+def cost_drive_up(trajectory, mode_cfg):
+    """Drive up mode: match average Z velocity to target."""
+    if not trajectory:
+        return {'total_cost': 1e6, 'avg_vel': 0}
+
+    settle_time = mode_cfg["settle_time"]
+    start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
+    end_state = trajectory[-1]
+
+    dt = end_state['time'] - start_state['time']
+    if dt < 1e-6:
+        return {'total_cost': 1e6, 'avg_vel': 0}
+
+    z_disp = end_state['pos'][2] - start_state['pos'][2]
+    avg_vel = z_disp / dt
+    target_vel = mode_cfg["actuator_target_ms"]
+
+    total_cost = abs(avg_vel - target_vel)
+    print(f"  Avg Z vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
+    return {'total_cost': total_cost, 'avg_vel': avg_vel}
+
 COST_FUNCTIONS = {
     "minimize_slip": cost_minimize_slip,
     "drive_side": cost_drive_side,
+    "drive_up": cost_drive_up,
 }
+
 # 2. Define the objective function to minimize.
 # It takes the parameters, runs the simulation, and returns the error.
 @use_named_args(space)
@@ -169,9 +192,9 @@ if __name__ == "__main__":
     print(f"Running Bayesian optimization for {N_CALLS} iterations (mode={MODE})...")
     
     # Optionally, start from the best known parameters for the "hold" mode to speed up convergence.
-    best_hold_x0 = [1.628, 0.0008, 10.0, 0.9094, 0.9946, 0.000667,
-                     0.9876, 0.000592, 0.00001, 100.0, 2.3945,
-                     1.1759, 5.7573, 0.03275, 28]
+    # best_hold_x0 = [1.628, 0.0008, 10.0, 0.9094, 0.9946, 0.000667,
+    #                  0.9876, 0.000592, 0.00001, 100.0, 2.3945,
+    #                  1.1759, 5.7573, 0.03275, 28]
     
     result = gp_minimize(
         objective,
@@ -179,7 +202,7 @@ if __name__ == "__main__":
         n_calls=N_CALLS,
         random_state=42,
         n_initial_points=N_CALLS // 5,
-        x0=best_hold_x0, # Start from the best known hold parameters, remove if not working)
+        # x0=best_hold_x0, # Start from the best known hold parameters, remove if not working)
     )
 
     # 4. Save results to a CSV file
