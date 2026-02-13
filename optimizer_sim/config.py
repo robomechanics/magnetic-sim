@@ -35,7 +35,7 @@ MODES = {
         "actuator_mode": "velocity",
         "actuator_target_ms": 2.0,
         "cost_function": "drive_up",
-        "sim_duration": 10.0,
+        "sim_duration": 3.0,
         "settle_time": 0.2,
         "pivot_angle": -1.5708,              # wheels forward (drive up)
     },

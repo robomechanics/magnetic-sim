@@ -126,6 +126,9 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     print(f"\nViewer - Press ENTER to start, SPACE to play/pause")
     print(f"Br: {Br:.3f} T | Max dist: {max_mag_dist*1000:.1f} mm | Duration: {sim_duration}s\n")
     
+    model.vis.map.znear = 0.01
+    model.vis.map.zfar = 100.0
+
     with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
         viewer.cam.trackbodyid = 1

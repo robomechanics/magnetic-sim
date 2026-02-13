@@ -6,12 +6,14 @@ Usage: python replay.py [--rank RANK] [--duration DURATION] [--mode MODE]
 import csv
 import argparse
 import viewer
+from config import DEFAULT_MODE
+
 
 def main():
     parser = argparse.ArgumentParser(description="Replay optimization result")
     parser.add_argument("--rank", type=int, default=1, help="Rank to replay (1=best)")
     parser.add_argument("--duration", type=float, default=None, help="Duration (s)")
-    parser.add_argument("--mode", type=str, default="hold", help="Mode: hold, drive_sideways")
+    parser.add_argument("--mode", type=str, default=DEFAULT_MODE, help="Mode: hold, drive_sideways, drive_up")
     args = parser.parse_args()
     
     # Ask user: original or optimized params
