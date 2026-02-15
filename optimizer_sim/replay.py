@@ -66,6 +66,7 @@ def main():
             'rocker_damping': float(s['rocker_damping']),
             'wheel_kp': float(s['wheel_kp']),
             'wheel_kv': float(s['wheel_kv']),
+            'max_force_per_wheel': float(s['max_force_per_wheel']),
         }
         
         viewer.visualize_simulation(params, args.duration, mode=args.mode)

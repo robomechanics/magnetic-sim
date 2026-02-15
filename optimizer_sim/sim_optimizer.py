@@ -13,7 +13,6 @@ from config import MODES, DEFAULT_MODE
 # Magnetic constants
 MU_0 = 4 * np.pi * 1e-7  # Magnetic permeability of free space (H/m)
 MAGNET_VOLUME = np.pi * (0.025**2) * 0.013  # Cylinder: r=0.025m, h=0.013m
-MAX_FORCE_PER_WHEEL = 50.0  # N
 
 def calculate_magnetic_force(distance, Br, V, MU_0):
     """Compute magnetic attraction force using dipole-dipole approximation."""
@@ -78,6 +77,7 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
     model.opt.timestep = 1./1e3
     model.opt.enableflags |= 1 << 0
 
+    # Spawn robot near wall with initial orientation facing it
     data = mujoco.MjData(model)
     data.qpos[0] = 0.035              # X = 35mm from wall
     data.qpos[1] = 0.0                # Y = centered
@@ -88,8 +88,8 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
     trajectory = []
     
     # Get parameters for magnetic force
-    Br = params.get('Br', 1.48)
-    max_magnetic_distance = params.get('max_magnetic_distance', 0.01)
+    Br = params.get('Br')
+    max_magnetic_distance = params.get('max_magnetic_distance')
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
     wheel_gids = []
@@ -140,7 +140,8 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                     continue
                 # Calculate magnetic force and apply to the geom
                 fmag = calculate_magnetic_force(dist, Br, MAGNET_VOLUME, MU_0)
-                fmag = np.clip(fmag, 0.0, MAX_FORCE_PER_WHEEL)
+                max_force = params['max_force_per_wheel']
+                fmag = np.clip(fmag, 0.0, max_force)
 
                 n = fromto[3:6] - fromto[0:3]
                 norm = np.linalg.norm(n)

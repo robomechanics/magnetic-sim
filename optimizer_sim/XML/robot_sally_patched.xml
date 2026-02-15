@@ -19,7 +19,8 @@
     <light pos="0 0 2" dir="0 0 -1" directional="true" diffuse="0.8 0.8 0.8" />
     <body name="frame" pos="0.24 0 0.35" quat="0 -0.7071 0 0.7071">
       <freejoint />
-      <geom mass="1.418814" type="mesh" pos="0.0180739 0.00440379 -0.0885384" quat="6.64008e-06 -7.24299e-06 1 -1.68313e-05" mesh="frame" material="frame_material" />
+      <geom mass="6.418814" type="mesh" pos="0.0180739 0.00440379 -0.0885384" quat="6.64008e-06 -7.24299e-06 1 -1.68313e-05" mesh="frame" material="frame_material" />
+      <geom name="sensor_mass" type="sphere" size="0.001" mass="1.9" pos="0.0180739 0.00440379 -0.0885384" rgba="0 0 0 0" contype="0" conaffinity="0" />
       <body name="frame_linkage" pos="0.0180761 -0.139947 -0.101144" quat="0.707094 -0.707118 -0.00101616 -0.00100588">
         <joint axis="0 0 1" name="right_hinge" type="hinge" stiffness="30.0" damping="1.0" />
         <geom mass="0.07" type="mesh" pos="-3.46945e-18 0 0.0365" quat="0.707107 0.707107 0 1.5761e-19" mesh="frame_linkage" material="frame_linkage_material" />

@@ -12,6 +12,8 @@ import csv
 import argparse
 import sim_optimizer
 
+from config import MODES, DEFAULT_MODE
+
 ARROW_RADIUS = 0.003
 key_state = {"paused": True}
 
@@ -85,8 +87,8 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     data.qpos[2] = 0.35               # Z = height along wall
     data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
     
-    Br = params.get('Br', 1.48)
-    max_mag_dist = params.get('max_magnetic_distance', 0.01)
+    Br = params['Br']
+    max_mag_dist = params['max_magnetic_distance']
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
     wheel_gids = []
@@ -150,7 +152,8 @@ def visualize_simulation(params, sim_duration=None, mode=None):
                     
                     if 0 <= dist <= max_mag_dist:
                         fmag = sim_optimizer.calculate_magnetic_force(dist, Br, sim_optimizer.MAGNET_VOLUME, sim_optimizer.MU_0)
-                        fmag = np.clip(fmag, 0.0, sim_optimizer.MAX_FORCE_PER_WHEEL)
+                        max_force = params['max_force_per_wheel']
+                        fmag = np.clip(fmag, 0.0, max_force)
                         
                         n = fromto[3:6] - fromto[0:3]
                         norm = np.linalg.norm(n)
@@ -171,6 +174,12 @@ def visualize_simulation(params, sim_duration=None, mode=None):
                         data.ctrl[act_id] = mode_cfg["actuator_target"]
 
                 mujoco.mj_step(model, data)
+
+                # Print COM velocity every 0.5s
+                if int(data.time * 1000) % 500 == 0:
+                    frame_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "frame")
+                    vel = data.cvel[frame_id, 3:]  # linear velocity (cvel is [angular(3), linear(3)])
+                    print(f"  t={data.time:.2f}s | vel: X={vel[0]:.4f} Y={vel[1]:.4f} Z={vel[2]:.4f} m/s | speed={np.linalg.norm(vel):.4f} m/s")
             
             viewer.sync()
 
@@ -210,6 +219,7 @@ def main():
         'rocker_damping': float(s['rocker_damping']),
         'wheel_kp': float(s['wheel_kp']),
         'wheel_kv': float(s['wheel_kv']),
+        'max_force_per_wheel': float(s['max_force_per_wheel']),
     }
     
     visualize_simulation(params, args.duration, mode=args.mode)

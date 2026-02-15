@@ -8,7 +8,9 @@ Modes:
 
 import numpy as np
 
+N_CALLS = 20
 WHEEL_RADIUS = 0.025  # meters, from XML cylinder geom
+# MAX_FORCE_PER_WHEEL = 100.0  # N
 
 MODES = {
     "hold": {
@@ -19,7 +21,7 @@ MODES = {
         "cost_function": "minimize_slip",
         "sim_duration": 5.0,
         "settle_time": 0.2,
-        "pivot_angle": 1.5708,            # np.pi/2 - wheels sideways
+        "pivot_angle": 0.0,            # 0 - wheels sideways
     },
     "drive_sideways": {
         # velocity is a position ramp
@@ -27,15 +29,15 @@ MODES = {
         "actuator_mode": "velocity",
         "actuator_target_ms": 2.0,
         "cost_function": "drive_side",
-        "sim_duration": 10.0,
+        "sim_duration": 5.0,
         "settle_time": 0.2,
-        "pivot_angle": 1.5708,            # np.pi/2 - wheels sideways
+        "pivot_angle": 0.0,            # np.pi/2 - wheels sideways
     },
     "drive_up": {
         "actuator_mode": "velocity",
         "actuator_target_ms": 2.0,
         "cost_function": "drive_up",
-        "sim_duration": 3.0,
+        "sim_duration": 5.0,
         "settle_time": 0.2,
         "pivot_angle": -1.5708,              # wheels forward (drive up)
     },
@@ -47,4 +49,6 @@ for mode_name in ["drive_sideways", "drive_up"]:
         MODES[mode_name]["actuator_target_ms"] / WHEEL_RADIUS
     )
 
-DEFAULT_MODE = "drive_up"
+DEFAULT_MODE = "hold"
+# DEFAULT_MODE = "drive_sideways"
+# DEFAULT_MODE = "drive_up"

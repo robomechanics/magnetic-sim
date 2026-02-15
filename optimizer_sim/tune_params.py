@@ -4,7 +4,7 @@ import csv
 import uuid
 import argparse
 import sim_optimizer
-from config import MODES, DEFAULT_MODE
+from config import MODES, DEFAULT_MODE, N_CALLS
 from typing import Dict, Any, List
 
 import numpy as np
@@ -14,7 +14,6 @@ from skopt.utils import use_named_args
 
 
 all_results = []
-N_CALLS = 10
 
 # Parse mode from CLI
 parser = argparse.ArgumentParser()
@@ -41,7 +40,7 @@ space = [
     Real(1e-5, 0.1, "log-uniform", name='rolling_friction'),
     
     # Joint dynamics (log-uniform spans order of magnitude)
-    Real(10.0, 100.0, "log-uniform", name='rocker_stiffness'),
+    Real(100.0, 1000.0, "uniform", name='rocker_stiffness'),
     Real(0.1, 5.0, "log-uniform", name='rocker_damping'),
     
     # Control gains (log-uniform)
@@ -52,7 +51,8 @@ space = [
     Real(0.005, 0.1, "log-uniform", name='max_magnetic_distance'),
     
     # Solver iterations (integer, uniform)
-    Integer(5, 30, name='noslip_iterations'),
+    Integer(5, 50, name='noslip_iterations'),
+    Real(20.0, 1000.0, "log-uniform", name='max_force_per_wheel'),
 ]
 
 
@@ -164,6 +164,8 @@ def objective(**params):
         # Control gains
         'wheel_kp': params['wheel_kp'],
         'wheel_kv': params['wheel_kv'],
+                      
+        'max_force_per_wheel': params['max_force_per_wheel'],
     }
 
     trajectory = sim_optimizer.run_simulation(
@@ -261,6 +263,7 @@ if __name__ == "__main__":
         'rocker_damping': best_result['params']['rocker_damping'],
         'wheel_kp': best_result['params']['wheel_kp'],
         'wheel_kv': best_result['params']['wheel_kv'],
+        'max_force_per_wheel': best_result['params']['max_force_per_wheel'],
     }
     
     print(f"Best cost: {best_result['cost']:.6f}")
