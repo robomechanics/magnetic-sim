@@ -5,6 +5,8 @@ Usage:
     python viewer.py --rank 1 --duration 10.0
 """
 
+from pyexpat import model
+from xml.parsers.expat import model
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -59,24 +61,37 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     
     # Apply parameters (same as sim_optimizer.run_simulation)
     wall_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall_geom")
-    model.geom_friction[wall_id] = params['ground_friction']
-    model.opt.o_solref = params['solref']
-    model.opt.o_solimp = params['solimp']
-    model.opt.noslip_iterations = params['noslip_iterations']
+    if 'ground_friction' in params:
+        model.geom_friction[wall_id] = params['ground_friction']
+        
+    if 'solref' in params:
+        model.opt.o_solref = params['solref']
+        
+    if 'solimp' in params:
+        model.opt.o_solimp = params['solimp']
+
+    if 'noslip_iterations' in params:
+        model.opt.noslip_iterations = params['noslip_iterations']
+
+    if 'rocker_stiffness' in params and 'rocker_damping' in params:
+        rocker_joints = ['right_hinge', 'left_hinge', 'BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
+        for joint_name in rocker_joints:
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            if joint_id != -1:
+                model.jnt_stiffness[joint_id] = params['rocker_stiffness']
+                model.dof_damping[model.jnt_dofadr[joint_id]] = params['rocker_damping']
+
+    if 'wheel_kp' in params and 'wheel_kv' in params:
+        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+        for act_name in wheel_actuators:
+            act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+            if act_id != -1:
+                model.actuator_gainprm[act_id, 0] = params['wheel_kp']
+                model.actuator_biasprm[act_id, 1] = -params['wheel_kv']
     
-    rocker_joints = ['right_hinge', 'left_hinge', 'BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
-    for joint_name in rocker_joints:
-        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-        if joint_id != -1:
-            model.jnt_stiffness[joint_id] = params['rocker_stiffness']
-            model.dof_damping[model.jnt_dofadr[joint_id]] = params['rocker_damping']
-    
-    wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
-    for act_name in wheel_actuators:
-        act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
-        if act_id != -1:
-            model.actuator_gainprm[act_id, 0] = params['wheel_kp']
-            model.actuator_biasprm[act_id, 1] = -params['wheel_kv']
+    Br = params['Br']
+    max_mag_dist = params['max_magnetic_distance']
+
     
     model.opt.timestep = 1./1e3
     model.opt.enableflags |= 1 << 0
@@ -87,8 +102,6 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     data.qpos[2] = 0.35               # Z = height along wall
     data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
     
-    Br = params['Br']
-    max_mag_dist = params['max_magnetic_distance']
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
     wheel_gids = []
@@ -116,13 +129,13 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     
     mujoco.mj_step(model, data)
         
-    # Set pivot angle from mode config and lock it
+    # Set wheels sideways and apply high stiffness to pivot joints to prevent flipping
     pivot_joints = ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
     for joint_name in pivot_joints:
         joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         if joint_id != -1:
             data.qpos[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
-            model.jnt_stiffness[joint_id] = 1000.0
+            model.jnt_stiffness[joint_id] = 1000.0  # CHANGE: hardcode to 1000
             model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
 
     print(f"\nViewer - Press ENTER to start, SPACE to play/pause")

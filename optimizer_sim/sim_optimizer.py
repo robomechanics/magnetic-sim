@@ -1,3 +1,4 @@
+from math import dist
 import mujoco
 import mujoco.viewer
 import time
@@ -8,11 +9,12 @@ import imageio
 import imageio.plugins.ffmpeg
 import pathlib
 
-from config import MODES, DEFAULT_MODE
+from config import MODES, DEFAULT_MODE, DEFAULT_PARAMS
 
 # Magnetic constants
 MU_0 = 4 * np.pi * 1e-7  # Magnetic permeability of free space (H/m)
 MAGNET_VOLUME = np.pi * (0.025**2) * 0.013  # Cylinder: r=0.025m, h=0.013m
+MAX_FORCE_PER_WHEEL = 50.0  # N
 
 def calculate_magnetic_force(distance, Br, V, MU_0):
     """Compute magnetic attraction force using dipole-dipole approximation."""
@@ -74,10 +76,13 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                 model.actuator_gainprm[act_id, 0] = params['wheel_kp']
                 model.actuator_biasprm[act_id, 1] = -params['wheel_kv']
 
+    # Get parameters for magnetic force
+    Br = params['Br']
+    max_magnetic_distance = params['max_magnetic_distance']
+
     model.opt.timestep = 1./1e3
     model.opt.enableflags |= 1 << 0
 
-    # Spawn robot near wall with initial orientation facing it
     data = mujoco.MjData(model)
     data.qpos[0] = 0.035              # X = 35mm from wall
     data.qpos[1] = 0.0                # Y = centered
@@ -87,9 +92,7 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
     settle_time = mode_cfg["settle_time"]
     trajectory = []
     
-    # Get parameters for magnetic force
-    Br = params.get('Br')
-    max_magnetic_distance = params.get('max_magnetic_distance')
+
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
     wheel_gids = []
@@ -118,13 +121,13 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
     try:
         mujoco.mj_step(model, data)
 
-        # Set pivot angle from mode config and lock it
+        # Set wheels sideways and apply high stiffness to pivot joints to prevent flipping
         pivot_joints = ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
         for joint_name in pivot_joints:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             if joint_id != -1:
                 data.qpos[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
-                model.jnt_stiffness[joint_id] = 1000.0
+                model.jnt_stiffness[joint_id] = 1000.0  # CHANGE: hardcode to 1000
                 model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
 
         def simulation_step():
@@ -140,20 +143,19 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                     continue
                 # Calculate magnetic force and apply to the geom
                 fmag = calculate_magnetic_force(dist, Br, MAGNET_VOLUME, MU_0)
-                max_force = params['max_force_per_wheel']
-                fmag = np.clip(fmag, 0.0, max_force)
+                fmag = np.clip(fmag, 0.0, params['max_force_per_wheel'])
 
                 n = fromto[3:6] - fromto[0:3]
                 norm = np.linalg.norm(n)
                 if norm > 1e-10:
                     data.xfrc_applied[model.geom_bodyid[gid], :3] = fmag * (n / norm)
-            # Ramped position reference mode 
-            if mode_cfg["actuator_mode"] == "velocity": # Apply target velocity ramp
+            # Actuator control for velocity mode
+            if mode_cfg["actuator_mode"] == "velocity":
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time # qpos target = velocity(m/s) * time (ramp)
+                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time
             else:
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = mode_cfg["actuator_target"] # Position control target (0 for hold mode)
+                    data.ctrl[act_id] = mode_cfg["actuator_target"]
 
             mujoco.mj_step(model, data)
             # Check for instability (non-finite values or solver failures)
@@ -203,22 +205,11 @@ if __name__ == "__main__":
     # }
 
     # Optimized hold default
-    default_params = {
-        'ground_friction': [0.9876, 0.000592, 0.00001],
-        'solref': [0.0008, 10.0],
-        'solimp': [0.9094, 0.9946, 0.000667, 0.5, 1.0],
-        'noslip_iterations': 28,
-        'rocker_stiffness': 100.0,
-        'rocker_damping': 2.3945,
-        'wheel_kp': 1.1759,
-        'wheel_kv': 5.7573,
-        'Br': 1.628,
-        'max_magnetic_distance': 0.03275,
-    }
-
+    default_params = DEFAULT_PARAMS
+    
     mode = DEFAULT_MODE
     print(f"Running simulation (mode={mode})...")
-    trajectory = run_simulation(default_params, visualize=False, mode=mode)
+    trajectory = run_simulation(default_params, visualize=True, mode=mode)
 
     if trajectory:
         settle_time = MODES[mode]["settle_time"]

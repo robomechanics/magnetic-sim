@@ -6,8 +6,7 @@ Usage: python replay.py [--rank RANK] [--duration DURATION] [--mode MODE]
 import csv
 import argparse
 import viewer
-from config import DEFAULT_MODE
-
+from config import DEFAULT_MODE, DEFAULT_PARAMS
 
 def main():
     parser = argparse.ArgumentParser(description="Replay optimization result")
@@ -24,18 +23,7 @@ def main():
     if choice == "2":
         # Default parameters
         print("\nUsing default parameters...")
-        params = {
-            'ground_friction': [0.95, 0.01, 0.01],
-            'solref': [0.0004, 25.0],
-            'solimp': [0.9, 0.95, 0.001, 0.5, 1.0],
-            'noslip_iterations': 15,
-            'rocker_stiffness': 30.0,
-            'rocker_damping': 1.0,
-            'wheel_kp': 10.0,
-            'wheel_kv': 1.0,
-            'Br': 1.48,
-            'max_magnetic_distance': 0.01
-        }
+        params = DEFAULT_PARAMS
         viewer.visualize_simulation(params, args.duration, mode=args.mode)
         
     elif choice == "1":

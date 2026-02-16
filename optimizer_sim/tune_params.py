@@ -4,7 +4,7 @@ import csv
 import uuid
 import argparse
 import sim_optimizer
-from config import MODES, DEFAULT_MODE, N_CALLS
+from config import MODES, DEFAULT_MODE, N_CALLS, SEARCH_SPACE, DEFAULT_PARAMS
 from typing import Dict, Any, List
 
 import numpy as np
@@ -23,37 +23,7 @@ MODE = args.mode
 mode_cfg = MODES[MODE]
 
 # 1. Define the search space for the parameters.
-space = [
-    # Magnetic parameters
-    Real(1.48 * 0.9, 1.48 * 1.1, "uniform", name='Br'),
-    
-    # Solver parameters
-    Real(0.0001, 0.0008, "uniform", name='solref_timeconst'),
-    Real(10.0, 50.0, "uniform", name='solref_dampratio'),
-    Real(0.8, 0.99, "uniform", name='solimp_dmin'),
-    Real(0.9, 1.0, "uniform", name='solimp_dmax'),
-    Real(1e-4, 1e-2, "log-uniform", name='solimp_width'),
-    
-    # Friction parameters (log-uniform for small values)
-    Real(0.9, 1.0, "uniform", name='sliding_friction'),
-    Real(1e-5, 0.1, "log-uniform", name='torsional_friction'),
-    Real(1e-5, 0.1, "log-uniform", name='rolling_friction'),
-    
-    # Joint dynamics (log-uniform spans order of magnitude)
-    Real(100.0, 1000.0, "uniform", name='rocker_stiffness'),
-    Real(0.1, 5.0, "log-uniform", name='rocker_damping'),
-    
-    # Control gains (log-uniform)
-    Real(1.0, 50.0, "log-uniform", name='wheel_kp'),
-    Real(0.1, 10.0, "log-uniform", name='wheel_kv'),
-    
-    # Magnetic cutoff (log-uniform)
-    Real(0.005, 0.1, "log-uniform", name='max_magnetic_distance'),
-    
-    # Solver iterations (integer, uniform)
-    Integer(5, 50, name='noslip_iterations'),
-    Real(20.0, 1000.0, "log-uniform", name='max_force_per_wheel'),
-]
+space = SEARCH_SPACE
 
 
 def cost_minimize_slip(trajectory, mode_cfg):
@@ -79,10 +49,31 @@ def cost_minimize_slip(trajectory, mode_cfg):
     print(f"  Total Movement: {total_movement:.4f} | Cost: {total_cost:.4f}")
     return {'total_cost': total_cost, 'total_movement': total_movement}
 
+# def cost_drive_side(trajectory, mode_cfg):
+#     """Drive sideways mode: match average Y velocity to target."""
+#     if not trajectory:
+#         return {'total_cost': 1e6, 'avg_vel': 0}
+
+#     settle_time = mode_cfg["settle_time"]
+#     start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
+#     end_state = trajectory[-1]
+
+#     dt = end_state['time'] - start_state['time']
+#     if dt < 1e-6:
+#         return {'total_cost': 1e6, 'avg_vel': 0}
+
+#     y_disp = end_state['pos'][1] - start_state['pos'][1]
+#     avg_vel = y_disp / dt
+#     target_vel = mode_cfg["actuator_target_ms"]
+
+#     total_cost = abs(avg_vel - target_vel)
+#     print(f"  Avg Y vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
+#     return {'total_cost': total_cost, 'avg_vel': avg_vel}
+
 def cost_drive_side(trajectory, mode_cfg):
     """Drive sideways mode: match average Y velocity to target."""
     if not trajectory:
-        return {'total_cost': 1e6, 'avg_vel': 0}
+        return {'total_cost': 1e6, 'avg_vel': 0, 'avg_z_vel': 0, 'avg_x_vel': 0}
 
     settle_time = mode_cfg["settle_time"]
     start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
@@ -90,20 +81,57 @@ def cost_drive_side(trajectory, mode_cfg):
 
     dt = end_state['time'] - start_state['time']
     if dt < 1e-6:
-        return {'total_cost': 1e6, 'avg_vel': 0}
+        return {'total_cost': 1e6, 'avg_vel': 0, 'avg_z_vel': 0, 'avg_x_vel': 0}
 
+    # Main objective: Y velocity (sideways)
     y_disp = end_state['pos'][1] - start_state['pos'][1]
-    avg_vel = y_disp / dt
+    avg_y_vel = y_disp / dt
     target_vel = mode_cfg["actuator_target_ms"]
+    y_vel_error = abs(avg_y_vel - target_vel)
+    
+    # Penalties: minimize unwanted X and Z movement
+    x_disp = end_state['pos'][0] - start_state['pos'][0]
+    avg_x_vel = abs(x_disp / dt)  # Penalize any X movement
+    
+    z_disp = end_state['pos'][2] - start_state['pos'][2]
+    avg_z_vel = abs(z_disp / dt)  # Penalize any Z movement (falling/climbing)
+    
+    # Total cost: primary objective + smaller penalties for off-axis movement
+    total_cost = y_vel_error + 0.2 * avg_x_vel + 0.2 * avg_z_vel
 
-    total_cost = abs(avg_vel - target_vel)
-    print(f"  Avg Y vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
-    return {'total_cost': total_cost, 'avg_vel': avg_vel}
+    print(f"  Avg Y vel: {avg_y_vel:.4f} m/s | Target: {target_vel:.4f} | X vel: {avg_x_vel:.4f} | Z vel: {avg_z_vel:.4f} | Cost: {total_cost:.4f}")
+    return {
+        'total_cost': total_cost, 
+        'avg_vel': avg_y_vel,
+        'avg_x_vel': avg_x_vel,
+        'avg_z_vel': avg_z_vel
+    }
+
+# def cost_drive_up(trajectory, mode_cfg):
+#     """Drive up mode: match average Z velocity to target."""
+#     if not trajectory:
+#         return {'total_cost': 1e6, 'avg_vel': 0}
+
+#     settle_time = mode_cfg["settle_time"]
+#     start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
+#     end_state = trajectory[-1]
+
+#     dt = end_state['time'] - start_state['time']
+#     if dt < 1e-6:
+#         return {'total_cost': 1e6, 'avg_vel': 0}
+
+#     z_disp = end_state['pos'][2] - start_state['pos'][2]
+#     avg_vel = z_disp / dt
+#     target_vel = mode_cfg["actuator_target_ms"]
+
+#     total_cost = abs(avg_vel - target_vel)
+#     print(f"  Avg Z vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
+#     return {'total_cost': total_cost, 'avg_vel': avg_vel}
 
 def cost_drive_up(trajectory, mode_cfg):
     """Drive up mode: match average Z velocity to target."""
     if not trajectory:
-        return {'total_cost': 1e6, 'avg_vel': 0}
+        return {'total_cost': 1e6, 'avg_vel': 0, 'avg_x_vel': 0, 'avg_y_vel': 0}
 
     settle_time = mode_cfg["settle_time"]
     start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
@@ -111,15 +139,31 @@ def cost_drive_up(trajectory, mode_cfg):
 
     dt = end_state['time'] - start_state['time']
     if dt < 1e-6:
-        return {'total_cost': 1e6, 'avg_vel': 0}
+        return {'total_cost': 1e6, 'avg_vel': 0, 'avg_x_vel': 0, 'avg_y_vel': 0}
 
+    # Main objective: Z velocity (upward)
     z_disp = end_state['pos'][2] - start_state['pos'][2]
-    avg_vel = z_disp / dt
+    avg_z_vel = z_disp / dt
     target_vel = mode_cfg["actuator_target_ms"]
+    z_vel_error = abs(avg_z_vel - target_vel)
+    
+    # Penalties: minimize unwanted X and Y movement
+    x_disp = end_state['pos'][0] - start_state['pos'][0]
+    avg_x_vel = abs(x_disp / dt)  # Penalize any X movement
+    
+    y_disp = end_state['pos'][1] - start_state['pos'][1]
+    avg_y_vel = abs(y_disp / dt)  # Penalize any Y movement (sideways drift)
+    
+    # Total cost: primary objective + smaller penalties for off-axis movement
+    total_cost = z_vel_error + 0.2 * avg_x_vel + 0.2 * avg_y_vel
 
-    total_cost = abs(avg_vel - target_vel)
-    print(f"  Avg Z vel: {avg_vel:.4f} m/s | Target: {target_vel:.4f} | Cost: {total_cost:.4f}")
-    return {'total_cost': total_cost, 'avg_vel': avg_vel}
+    print(f"  Avg Z vel: {avg_z_vel:.4f} m/s | Target: {target_vel:.4f} | X vel: {avg_x_vel:.4f} | Y vel: {avg_y_vel:.4f} | Cost: {total_cost:.4f}")
+    return {
+        'total_cost': total_cost, 
+        'avg_vel': avg_z_vel,
+        'avg_x_vel': avg_x_vel,
+        'avg_y_vel': avg_y_vel
+    }
 
 COST_FUNCTIONS = {
     "minimize_slip": cost_minimize_slip,
@@ -193,10 +237,26 @@ if __name__ == "__main__":
     # 3. Run the optimization.
     print(f"Running Bayesian optimization for {N_CALLS} iterations (mode={MODE})...")
     
-    # Optionally, start from the best known parameters for the "hold" mode to speed up convergence.
-    # best_hold_x0 = [1.628, 0.0008, 10.0, 0.9094, 0.9946, 0.000667,
-    #                  0.9876, 0.000592, 0.00001, 100.0, 2.3945,
-    #                  1.1759, 5.7573, 0.03275, 28]
+    # Optionally, start from the best known parameters
+    # Convert DEFAULT_PARAMS dict to x0 list matching the space order
+    best_hold_x0 = [
+        DEFAULT_PARAMS['Br'],                           # Br
+        DEFAULT_PARAMS['solref'][0],                    # solref_timeconst
+        DEFAULT_PARAMS['solref'][1],                    # solref_dampratio
+        DEFAULT_PARAMS['solimp'][0],                    # solimp_dmin
+        DEFAULT_PARAMS['solimp'][1],                    # solimp_dmax
+        DEFAULT_PARAMS['solimp'][2],                    # solimp_width
+        DEFAULT_PARAMS['ground_friction'][0],           # sliding_friction
+        DEFAULT_PARAMS['ground_friction'][1],           # torsional_friction
+        DEFAULT_PARAMS['ground_friction'][2],           # rolling_friction
+        DEFAULT_PARAMS['rocker_stiffness'],             # rocker_stiffness
+        DEFAULT_PARAMS['rocker_damping'],               # rocker_damping
+        DEFAULT_PARAMS['wheel_kp'],                     # wheel_kp
+        DEFAULT_PARAMS['wheel_kv'],                     # wheel_kv
+        DEFAULT_PARAMS['max_magnetic_distance'],        # max_magnetic_distance
+        DEFAULT_PARAMS['noslip_iterations'],            # noslip_iterations
+        DEFAULT_PARAMS['max_force_per_wheel']           # max_force_per_wheel
+    ]
     
     result = gp_minimize(
         objective,
@@ -204,7 +264,7 @@ if __name__ == "__main__":
         n_calls=N_CALLS,
         random_state=42,
         n_initial_points=N_CALLS // 5,
-        # x0=best_hold_x0, # Start from the best known hold parameters, remove if not working)
+        # x0=best_hold_x0,  # Start from the best known hold parameters
     )
 
     # 4. Save results to a CSV file
