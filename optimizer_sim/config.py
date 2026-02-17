@@ -10,8 +10,8 @@ import numpy as np
 from skopt.space import Real, Integer
 
 # DEFAULT_MODE = "hold"
-# DEFAULT_MODE = "drive_sideways"
-DEFAULT_MODE = "drive_up"
+DEFAULT_MODE = "drive_sideways"
+# DEFAULT_MODE = "drive_up"
 
 N_CALLS = 20
 WHEEL_RADIUS = 0.025
@@ -55,17 +55,17 @@ for mode_name in ["drive_sideways", "drive_up"]:
 
 # This set runs well with hold and sideways mode 
 DEFAULT_PARAMS = {
-    'ground_friction': [0.9876, 0.000592, 0.00001],
-    'solref': [0.0008, 10.0],
-    'solimp': [0.9094, 0.9946, 0.000667, 0.5, 1.0],
-    'noslip_iterations': 28,
-    'rocker_stiffness': 100.0,
-    'rocker_damping': 2.3945,
-    'wheel_kp': 1.1759,
-    'wheel_kv': 5.7573,
-    'Br': 1.628,
-    'max_magnetic_distance': 0.03275,
-    'max_force_per_wheel': 100.0,
+    'ground_friction': [0.923048, 0.000546, 0.000241],
+    'solref': [0.000349, 30.867833],
+    'solimp': [0.870259, 0.980192, 0.000135, 0.5, 1.0],
+    'noslip_iterations': 12,
+    'rocker_stiffness': 991.791538,
+    'rocker_damping': 0.279167,
+    'wheel_kp': 1.655694,
+    'wheel_kv': 4.849150,
+    'Br': 1.490629,
+    'max_magnetic_distance': 0.009070,
+    'max_force_per_wheel': 53.821678,
 }
 
 # Bayesian optimization search space

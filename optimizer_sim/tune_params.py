@@ -73,9 +73,16 @@ def cost_drive_side(trajectory, mode_cfg):
     # Penalties: minimize unwanted X and Z displacement
     x_disp = abs(end_state['pos'][0] - start_state['pos'][0])  # Penalize any X displacement
     z_disp = abs(end_state['pos'][2] - start_state['pos'][2])  # Penalize any Z displacement (falling/climbing)
-    
+    # Calculate how far the robot actually traveled in Y direction
+    y_distance_traveled = abs(y_disp)
+    target_distance = target_vel * dt  # How far it SHOULD have traveled
+
+    # Penalty for not reaching the expected distance
+    y_distance_error = abs(y_distance_traveled - target_distance)
+
     # Total cost: primary objective + smaller penalties for off-axis displacement
-    total_cost = y_vel_error + 0.2 * x_disp + 0.2 * z_disp
+    total_cost = y_vel_error + y_distance_error + 0.2 * x_disp + 0.2 * z_disp
+    # total_cost = y_vel_error + 0.2 * x_disp + 0.2 * z_disp
 
     print(f"  Avg Y vel: {avg_y_vel:.4f} m/s | Target: {target_vel:.4f} | X disp: {x_disp:.4f} m | Z disp: {z_disp:.4f} m | Cost: {total_cost:.4f}")
     return {
@@ -332,9 +339,22 @@ if __name__ == "__main__":
     print("\n--- Optimization Finished ---")
     best_cost = result.fun
     print(f"Lowest Cost Found: {best_cost:.6f}")
-    print("Best Parameters:")
-    for dim, value in zip(space, result.x):
-        print(f"  {dim.name}: {value:.6f}")
+    
+    # Print in DEFAULT_PARAMS format for easy copy-paste
+    best_params_dict = dict(zip([dim.name for dim in space], result.x))
+    print("\nDEFAULT_PARAMS = {")
+    print(f"    'ground_friction': [{best_params_dict['sliding_friction']:.6f}, {best_params_dict['torsional_friction']:.6f}, {best_params_dict['rolling_friction']:.6f}],")
+    print(f"    'solref': [{best_params_dict['solref_timeconst']:.6f}, {best_params_dict['solref_dampratio']:.6f}],")
+    print(f"    'solimp': [{best_params_dict['solimp_dmin']:.6f}, {best_params_dict['solimp_dmax']:.6f}, {best_params_dict['solimp_width']:.6f}, 0.5, 1.0],")
+    print(f"    'noslip_iterations': {int(best_params_dict['noslip_iterations'])},")
+    print(f"    'rocker_stiffness': {best_params_dict['rocker_stiffness']:.6f},")
+    print(f"    'rocker_damping': {best_params_dict['rocker_damping']:.6f},")
+    print(f"    'wheel_kp': {best_params_dict['wheel_kp']:.6f},")
+    print(f"    'wheel_kv': {best_params_dict['wheel_kv']:.6f},")
+    print(f"    'Br': {best_params_dict['Br']:.6f},")
+    print(f"    'max_magnetic_distance': {best_params_dict['max_magnetic_distance']:.6f},")
+    print(f"    'max_force_per_wheel': {best_params_dict['max_force_per_wheel']:.6f},")
+    print("}")
     
     # --- Launch best result with visualization ---
     print("\n--- Launching best result with visualization ---")
