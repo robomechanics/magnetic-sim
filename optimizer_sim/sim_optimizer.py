@@ -88,6 +88,7 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
     data.qpos[1] = 0.0                # Y = centered
     data.qpos[2] = 0.35               # Z = height along wall
     data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
+    # data.qpos[3:7] = [0, -0.707, 0, 0.707]  # Rotated to face wall + 180° yaw flip
 
     settle_time = mode_cfg["settle_time"]
     trajectory = []

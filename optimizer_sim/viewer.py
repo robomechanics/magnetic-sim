@@ -96,12 +96,13 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     model.opt.timestep = 1./1e3
     model.opt.enableflags |= 1 << 0
     
+
     data = mujoco.MjData(model)
     data.qpos[0] = 0.035              # X = 35mm from wall
     data.qpos[1] = 0.0                # Y = centered
     data.qpos[2] = 0.35               # Z = height along wall
     data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
-    
+    # data.qpos[3:7] = [0, -0.707, 0, 0.707] # Rotated to face wall + 180° yaw flip
 
     # Get all sampling sphere geoms (24 per wheel = 96 total)
     wheel_gids = []
@@ -186,12 +187,27 @@ def visualize_simulation(params, sim_duration=None, mode=None):
                     for act_id in wheel_act_ids:
                         data.ctrl[act_id] = mode_cfg["actuator_target"]
 
+                # Show robot front-facing direction (red arrow)
+                frame_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "frame")
+                robot_pos = data.xpos[frame_id].copy()
+                robot_quat = data.xquat[frame_id].copy()
+                
+                # Convert quaternion to rotation matrix to get forward direction
+                from scipy.spatial.transform import Rotation as R
+                rot = R.from_quat([robot_quat[1], robot_quat[2], robot_quat[3], robot_quat[0]])  # xyzw format
+                forward_vec = rot.apply([0, 1, 0])  # Y-axis is forward
+                
+                # Draw red arrow showing front direction (0.3m long)
+                arrow_end = robot_pos + 0.3 * forward_vec
+                add_arrow(viewer.user_scn, robot_pos, arrow_end, (1, 0, 0, 1))  # Red arrow
+
                 mujoco.mj_step(model, data)
 
                 # Print COM velocity every 0.5s
                 if int(data.time * 1000) % 500 == 0:
                     frame_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "frame")
-                    vel = data.cvel[frame_id, 3:]  # linear velocity (cvel is [angular(3), linear(3)])
+                    # vel = data.cvel[frame_id, 3:]  # linear velocity (cvel is [angular(3), linear(3)])
+                    vel = data.qvel[0:3]
                     print(f"  t={data.time:.2f}s | vel: X={vel[0]:.4f} Y={vel[1]:.4f} Z={vel[2]:.4f} m/s | speed={np.linalg.norm(vel):.4f} m/s")
             
             viewer.sync()

@@ -9,9 +9,12 @@ Modes:
 import numpy as np
 from skopt.space import Real, Integer
 
+# DEFAULT_MODE = "hold"
+# DEFAULT_MODE = "drive_sideways"
+DEFAULT_MODE = "drive_up"
+
 N_CALLS = 20
-WHEEL_RADIUS = 0.025  # meters, from XML cylinder geom
-# MAX_FORCE_PER_WHEEL = 100.0  # N
+WHEEL_RADIUS = 0.025
 
 MODES = {
     "hold": {
@@ -30,7 +33,7 @@ MODES = {
         "actuator_mode": "velocity",
         "actuator_target_ms": 2.0,
         "cost_function": "drive_side",
-        "sim_duration": 10.0,
+        "sim_duration": 5.0,
         "settle_time": 0.2,
         "pivot_angle": 0.0,            # np.pi/2 - wheels sideways
     },
@@ -95,9 +98,6 @@ SEARCH_SPACE = [
     
     # Solver iterations (integer, uniform)
     Integer(5, 30, name='noslip_iterations'),
-    Real(20.0, 1000.0, "log-uniform", name='max_force_per_wheel'),
+    Real(20.0, 300.0, "log-uniform", name='max_force_per_wheel'),
 ]
 
-# DEFAULT_MODE = "hold"
-# DEFAULT_MODE = "drive_sideways"
-DEFAULT_MODE = "drive_up"
