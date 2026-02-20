@@ -81,13 +81,20 @@ def visualize_simulation(params, sim_duration=None, mode=None):
                 model.jnt_stiffness[joint_id] = params['rocker_stiffness']
                 model.dof_damping[model.jnt_dofadr[joint_id]] = params['rocker_damping']
 
-    if 'wheel_kp' in params and 'wheel_kv' in params:
+    if 'wheel_kp' in params:
         wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
         for act_name in wheel_actuators:
             act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
             if act_id != -1:
                 model.actuator_gainprm[act_id, 0] = params['wheel_kp']
-                model.actuator_biasprm[act_id, 1] = -params['wheel_kv']
+                model.actuator_biasprm[act_id, 1] = -params['wheel_kp']  # ADD THIS LINE!
+
+    if 'wheel_kv' in params:
+        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+        for act_name in wheel_actuators:
+            act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+            if act_id != -1:
+                model.actuator_biasprm[act_id, 2] = -params['wheel_kv']
     
     Br = params['Br']
     max_mag_dist = params['max_magnetic_distance']
@@ -144,6 +151,8 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     
     model.vis.map.znear = 0.01
     model.vis.map.zfar = 100.0
+    model.opt.iterations = 100
+    model.opt.tolerance = 1e-8
 
     with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
@@ -182,10 +191,10 @@ def visualize_simulation(params, sim_duration=None, mode=None):
                 # Actuator control
                 if mode_cfg["actuator_mode"] == "velocity":
                     for act_id in wheel_act_ids:
-                        data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time
+                        data.ctrl[act_id] = mode_cfg["actuator_target_rads"]
                 else:
                     for act_id in wheel_act_ids:
-                        data.ctrl[act_id] = mode_cfg["actuator_target"]
+                        data.ctrl[act_id] = 0.0
 
                 # Show robot front-facing direction (red arrow)
                 frame_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "frame")

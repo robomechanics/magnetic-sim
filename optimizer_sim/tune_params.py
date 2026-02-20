@@ -78,7 +78,7 @@ def cost_drive_side(trajectory, mode_cfg):
     target_distance = target_vel * dt  # How far it SHOULD have traveled
 
     # Penalty for not reaching the expected distance
-    y_distance_error = abs(y_distance_traveled - target_distance)
+    y_distance_error = abs(y_distance_traveled - target_distance) * 0.6
 
     # Total cost: primary objective + smaller penalties for off-axis displacement
     total_cost = y_vel_error + y_distance_error + 0.2 * x_disp + 0.2 * z_disp
@@ -131,93 +131,6 @@ COST_FUNCTIONS = {
     "drive_side": cost_drive_side,
     "drive_up": cost_drive_up,
 }
-# def cost_drive_side(trajectory, mode_cfg):
-#     """Drive sideways mode: match average Y velocity to target."""
-#     if not trajectory:
-#         return {'total_cost': 1e6, 'avg_vel': 0, 'avg_z_vel': 0, 'avg_x_vel': 0}
-
-#     settle_time = mode_cfg["settle_time"]
-#     start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
-#     end_state = trajectory[-1]
-
-#     dt = end_state['time'] - start_state['time']
-#     if dt < 1e-6:
-#         return {'total_cost': 1e6, 'avg_vel': 0, 'avg_z_vel': 0, 'avg_x_vel': 0}
-
-#     # start_idx = next((i for i, s in enumerate(trajectory) if s['time'] >= settle_time), 0)
-#     # z_velocities = [trajectory[i]['vel'][2] for i in range(start_idx, len(trajectory))]
-#     # if len(z_velocities) > 1:
-#     #     max_z_vel = max(abs(v) for v in z_velocities)
-#     #     if max_z_vel > 5.0:  # If Z velocity exceeds 5 m/s, robot fell off
-#     #         print(f"  WALL CONTACT LOST (max Z vel: {max_z_vel:.2f} m/s) - penalizing heavily")
-#     #         return {'total_cost': 1e6, 'avg_vel': 0, 'avg_x_vel': 0, 'avg_z_vel': 0}
-
-#     # Main objective: Y velocity (sideways)
-#     y_disp = end_state['pos'][1] - start_state['pos'][1]
-#     avg_y_vel = y_disp / dt
-#     target_vel = mode_cfg["actuator_target_ms"]
-#     y_vel_error = abs(avg_y_vel - target_vel)
-    
-#     # Penalties: minimize unwanted X and Z movement
-#     x_disp = end_state['pos'][0] - start_state['pos'][0]
-#     avg_x_vel = abs(x_disp / dt)  # Penalize any X movement
-    
-#     z_disp = end_state['pos'][2] - start_state['pos'][2]
-#     avg_z_vel = abs(z_disp / dt)  # Penalize any Z movement (falling/climbing)
-    
-#     # Total cost: primary objective + smaller penalties for off-axis movement
-#     total_cost = y_vel_error + 0.2 * avg_x_vel + 0.2 * avg_z_vel
-
-#     print(f"  Avg Y vel: {avg_y_vel:.4f} m/s | Target: {target_vel:.4f} | X vel: {avg_x_vel:.4f} | Z vel: {avg_z_vel:.4f} | Cost: {total_cost:.4f}")
-#     return {
-#         'total_cost': total_cost, 
-#         'avg_vel': avg_y_vel,
-#         'avg_x_vel': avg_x_vel,
-#         'avg_z_vel': avg_z_vel
-#     }
-
-# def cost_drive_up(trajectory, mode_cfg):
-#     """Drive up mode: match average Z velocity to target."""
-#     if not trajectory:
-#         return {'total_cost': 1e6, 'avg_vel': 0, 'avg_x_vel': 0, 'avg_y_vel': 0}
-
-#     settle_time = mode_cfg["settle_time"]
-#     start_state = next((s for s in trajectory if s['time'] >= settle_time), trajectory[0])
-#     end_state = trajectory[-1]
-
-#     dt = end_state['time'] - start_state['time']
-#     if dt < 1e-6:
-#         return {'total_cost': 1e6, 'avg_vel': 0, 'avg_x_vel': 0, 'avg_y_vel': 0}
-
-#     # Main objective: Z velocity (upward)
-#     z_disp = end_state['pos'][2] - start_state['pos'][2]
-#     avg_z_vel = z_disp / dt
-#     target_vel = mode_cfg["actuator_target_ms"]
-#     z_vel_error = abs(avg_z_vel - target_vel)
-    
-#     # Penalties: minimize unwanted X and Y movement
-#     x_disp = end_state['pos'][0] - start_state['pos'][0]
-#     avg_x_vel = abs(x_disp / dt)  # Penalize any X movement
-    
-#     y_disp = end_state['pos'][1] - start_state['pos'][1]
-#     avg_y_vel = abs(y_disp / dt)  # Penalize any Y movement (sideways drift)
-    
-#     # Total cost: primary objective + smaller penalties for off-axis movement
-#     total_cost = z_vel_error + 0.2 * avg_x_vel + 0.2 * avg_y_vel
-
-#     print(f"  Avg Z vel: {avg_z_vel:.4f} m/s | Target: {target_vel:.4f} | X vel: {avg_x_vel:.4f} | Y vel: {avg_y_vel:.4f} | Cost: {total_cost:.4f}")
-#     return {
-#         'total_cost': total_cost, 
-#         'avg_vel': avg_z_vel,
-#         'avg_x_vel': avg_x_vel,
-#         'avg_y_vel': avg_y_vel
-#     }
-
-COST_FUNCTIONS = {
-    "minimize_slip": cost_minimize_slip,
-    "drive_side": cost_drive_side,
-    "drive_up": cost_drive_up,
-}
 
 # 2. Define the objective function to minimize.
 # It takes the parameters, runs the simulation, and returns the error.
@@ -259,6 +172,8 @@ def objective(**params):
                       
         'max_force_per_wheel': params['max_force_per_wheel'],
     }
+
+
 
     trajectory = sim_optimizer.run_simulation(
         sim_params, mode=MODE)

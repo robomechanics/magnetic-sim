@@ -10,8 +10,8 @@ import numpy as np
 from skopt.space import Real, Integer
 
 # DEFAULT_MODE = "hold"
-DEFAULT_MODE = "drive_sideways"
-# DEFAULT_MODE = "drive_up"
+# DEFAULT_MODE = "drive_sideways"
+DEFAULT_MODE = "drive_up"
 
 N_CALLS = 20
 WHEEL_RADIUS = 0.025
@@ -31,9 +31,9 @@ MODES = {
         # velocity is a position ramp
         # produces approximately constant velocity behavior, because the PD controller is always “chasing” a moving angle target.
         "actuator_mode": "velocity",
-        "actuator_target_ms": 2.0,
+        "actuator_target_ms": 1.0,
         "cost_function": "drive_side",
-        "sim_duration": 5.0,
+        "sim_duration": 10.0,
         "settle_time": 0.2,
         "pivot_angle": 0.0,            # np.pi/2 - wheels sideways
     },
@@ -98,6 +98,6 @@ SEARCH_SPACE = [
     
     # Solver iterations (integer, uniform)
     Integer(5, 30, name='noslip_iterations'),
-    Real(20.0, 300.0, "log-uniform", name='max_force_per_wheel'),
+    Real(100.0, 300.0, "uniform", name='max_force_per_wheel'),
 ]
 

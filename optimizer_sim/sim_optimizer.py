@@ -1,4 +1,5 @@
 from math import dist
+from xml.parsers.expat import model
 import mujoco
 import mujoco.viewer
 import time
@@ -14,7 +15,9 @@ from config import MODES, DEFAULT_MODE, DEFAULT_PARAMS
 # Magnetic constants
 MU_0 = 4 * np.pi * 1e-7  # Magnetic permeability of free space (H/m)
 MAGNET_VOLUME = np.pi * (0.025**2) * 0.013  # Cylinder: r=0.025m, h=0.013m
-MAX_FORCE_PER_WHEEL = 50.0  # N
+# MAX_FORCE_PER_WHEEL = 50.0  # N
+
+
 
 def calculate_magnetic_force(distance, Br, V, MU_0):
     """Compute magnetic attraction force using dipole-dipole approximation."""
@@ -68,13 +71,20 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                 model.jnt_stiffness[joint_id] = params['rocker_stiffness']
                 model.dof_damping[model.jnt_dofadr[joint_id]] = params['rocker_damping']
 
-    if 'wheel_kp' in params and 'wheel_kv' in params:
+    if 'wheel_kp' in params:
         wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
         for act_name in wheel_actuators:
             act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
             if act_id != -1:
                 model.actuator_gainprm[act_id, 0] = params['wheel_kp']
-                model.actuator_biasprm[act_id, 1] = -params['wheel_kv']
+                model.actuator_biasprm[act_id, 1] = -params['wheel_kp']  # ADD THIS LINE!
+
+    if 'wheel_kv' in params:
+        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+        for act_name in wheel_actuators:
+            act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+            if act_id != -1:
+                model.actuator_biasprm[act_id, 2] = -params['wheel_kv']
 
     # Get parameters for magnetic force
     Br = params['Br']
@@ -82,6 +92,8 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
 
     model.opt.timestep = 1./1e3
     model.opt.enableflags |= 1 << 0
+    model.opt.iterations = 100  # Increase from default 50
+    model.opt.tolerance = 1e-8  # Tighter convergence
 
     data = mujoco.MjData(model)
     data.qpos[0] = 0.035              # X = 35mm from wall
@@ -131,6 +143,7 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                 model.jnt_stiffness[joint_id] = 1000.0  # CHANGE: hardcode to 1000
                 model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
 
+
         def simulation_step():
             data.xfrc_applied[:] = 0.0 
             
@@ -151,14 +164,26 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
                 if norm > 1e-10:
                     data.xfrc_applied[model.geom_bodyid[gid], :3] = fmag * (n / norm)
             # Actuator control for velocity mode
+            # if mode_cfg["actuator_mode"] == "velocity":
+            #     for act_id in wheel_act_ids:
+            #         data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * dt # Large but fixed position offset
+            # else:
+            #     for act_id in wheel_act_ids:
+            #         data.ctrl[act_id] = mode_cfg["actuator_target"]
+
+            # Actuator control
             if mode_cfg["actuator_mode"] == "velocity":
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * data.time
+                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"]
             else:
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = mode_cfg["actuator_target"]
+                    data.ctrl[act_id] = 0.0
+
+            if np.any(np.abs(data.qvel) > 100.0):  # Any velocity > 100 m/s
+                raise ValueError("Simulation unstable: Excessive velocities.")
 
             mujoco.mj_step(model, data)
+
             # Check for instability (non-finite values or solver failures)
             if not np.all(np.isfinite(data.qacc)):
                 raise ValueError("Simulation unstable: Non-finite accelerations.")
@@ -207,6 +232,8 @@ if __name__ == "__main__":
 
     # Optimized hold default
     default_params = DEFAULT_PARAMS
+
+
     
     mode = DEFAULT_MODE
     print(f"Running simulation (mode={mode})...")

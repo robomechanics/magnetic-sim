@@ -13,8 +13,8 @@
     
   </default>
   <worldbody>
-    <body name="magnetic_wall" pos="0.25 0 0.35">
-            <geom name="wall_geom" type="box" size="0.02 10.0 15.0" rgba="0.8 0.8 0.8 1" 
+    <body name="magnetic_wall" pos="0.25 -5.0 0.35">
+            <geom name="wall_geom" type="box" size="0.02 10.0 20.0" rgba="0.8 0.8 0.8 1" 
             friction="0.95 0.1 0.1" contype="1" conaffinity="1" />
     </body>
     <light pos="0 0 2" dir="0 0 -1" directional="true" diffuse="0.8 0.8 0.8" />
@@ -199,9 +199,17 @@
     <position name="FR_pivot" joint="FR_pivot" kp="20" kv="10" />
     <position name="BL_pivot" joint="BL_pivot" kp="20" kv="10" />
     <position name="FL_pivot" joint="FL_pivot" kp="20" kv="10" />
-    <position name="BR_wheel_motor" joint="BR_wheel" kp="10.0" kv="1.0"/>
+    <!-- <position name="BR_wheel_motor" joint="BR_wheel" kp="10.0" kv="1.0"/>
     <position name="FR_wheel_motor" joint="FR_wheel" kp="10.0" kv="1.0"/>
     <position name="BL_wheel_motor" joint="BL_wheel" kp="10.0" kv="1.0"/>
-    <position name="FL_wheel_motor" joint="FL_wheel" kp="10.0" kv="1.0"/>
+    <position name="FL_wheel_motor" joint="FL_wheel" kp="10.0" kv="1.0"/> -->
+    
+    <!-- Wheel motors changed to velocity control -->
+    <!-- Wheel motors changed to intvelocity control -->
+    <intvelocity name="BR_wheel_motor" joint="BR_wheel" kp="1.0" kv="5.0" actrange="-1e5 1e5"/>
+    <intvelocity name="FR_wheel_motor" joint="FR_wheel" kp="1.0" kv="5.0" actrange="-1e5 1e5"/>
+    <intvelocity name="BL_wheel_motor" joint="BL_wheel" kp="1.0" kv="5.0" actrange="-1e5 1e5"/>
+    <intvelocity name="FL_wheel_motor" joint="FL_wheel" kp="1.0" kv="5.0" actrange="-1e5 1e5"/>
+
   </actuator>
 </mujoco>
