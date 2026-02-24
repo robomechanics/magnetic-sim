@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco model="magnet_plate_test">
+  <compiler angle="radian" autolimits="true" />
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+            rgb1="0.9 0.9 0.9" rgb2="0.7 0.7 0.7"/>
+    <material name="grid" texture="grid" texrepeat="5 5" reflectance="0.2"/>
+    <texture name="skybox" type="skybox" builtin="gradient"
+            rgb1="0.8 0.85 0.9" rgb2="0.95 0.95 0.95" width="512" height="512"/>
+  </asset>
+
+  <option timestep="0.001" integrator="implicit" gravity="0 0 -9.81" />
+
+  <default>
+    <geom condim="6" contype="1" conaffinity="1" friction="0.8 0.1 0.1" rgba="0.7 0.7 0.7 1" />
+  </default>
+
+  <worldbody>
+    <geom name="floor" type="plane" size="1 1 0.01" material="grid"
+        pos="0 0 -0.015" contype="0" conaffinity="0"/>
+
+    <!-- Plate lies flat: top surface at z=0 -->
+    <body name="plate" pos="0 0 0">
+      <geom name="plate_geom" type="box" pos="0 0 -0.005" size="0.25 0.25 0.005" rgba="0.3 0.3 0.3 1" />
+    </body>
+
+    <!-- Slider rail: fixed to world, constrains magnet to Z-axis only -->
+    <body name="slider_rail" pos="0 0 0">
+      <!-- Magnet body slides along Z only via slide joint -->
+      <body name="magnet" pos="0 0 0.0325">
+        <joint name="pull_joint" type="slide" axis="0 0 1" range="-0.01 0.5" />
+
+        <!-- Main magnet geom: radius=31.5mm, half-height=12.5mm (25mm total height) -->
+        <geom name="magnet_cyl" type="cylinder" size="0.0315 0.0125" rgba="0.85 0.1 0.1 1" density="7500" />
+
+        <!-- Embedded sampling spheres (3 rings x 8 points = 24). Non-colliding. -->
+        <!-- Ring radius = 0.0285 m; z offsets relative to magnet body center -->
+        <!-- Bottom ring (z = -0.0105): closest to plate -->
+        <geom type="sphere" size="0.002" pos="0.028500 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.020152 0.020152 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.000000 0.028500 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.020152 0.020152 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.028500 0.000000 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.020152 -0.020152 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.000000 -0.028500 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.020152 -0.020152 -0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+
+        <!-- Middle ring (z = 0.0) -->
+        <geom type="sphere" size="0.002" pos="0.028500 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.020152 0.020152 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.000000 0.028500 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.020152 0.020152 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.028500 0.000000 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.020152 -0.020152 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.000000 -0.028500 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.020152 -0.020152 0.000000" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+
+        <!-- Top ring (z = +0.0105) -->
+        <geom type="sphere" size="0.002" pos="0.028500 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.020152 0.020152 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.000000 0.028500 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.020152 0.020152 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.028500 0.000000 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="-0.020152 -0.020152 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.000000 -0.028500 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+        <geom type="sphere" size="0.002" pos="0.020152 -0.020152 0.010500" rgba="0 0 1 1" contype="0" conaffinity="0" mass="1e-6" />
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

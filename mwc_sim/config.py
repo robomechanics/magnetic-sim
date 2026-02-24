@@ -9,9 +9,9 @@ Modes:
 import numpy as np
 from skopt.space import Real, Integer
 
-DEFAULT_MODE = "hold"
+# DEFAULT_MODE = "hold"
 # DEFAULT_MODE = "drive_sideways"
-# DEFAULT_MODE = "drive_up"
+DEFAULT_MODE = "drive_up"
 
 N_CALLS = 20
 WHEEL_RADIUS = 0.025
