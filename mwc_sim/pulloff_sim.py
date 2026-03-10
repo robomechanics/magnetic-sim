@@ -178,7 +178,7 @@ def plot(records, pulloff_force, pull_rate):
     ax.set_ylim(bottom=0); ax.legend(fontsize=9); ax.grid(alpha=0.25)
 
     plt.tight_layout()
-    plt.savefig("pulloff_results.png", dpi=150, bbox_inches="tight")
+    plt.savefig("results/wrench_results.png", dpi=150, bbox_inches="tight")
     print("Plot saved: pulloff_results.png")
     plt.show()
 

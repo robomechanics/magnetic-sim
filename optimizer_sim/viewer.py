@@ -154,6 +154,10 @@ def visualize_simulation(params, sim_duration=None, mode=None):
     model.opt.iterations = 100
     model.opt.tolerance = 1e-8
 
+    # Track trajectory for post-sim performance summary
+    settle_time = mode_cfg["settle_time"]
+    trajectory_log = []  # list of (time, pos) after settle
+
     with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
         viewer.cam.trackbodyid = 1
@@ -212,14 +216,77 @@ def visualize_simulation(params, sim_duration=None, mode=None):
 
                 mujoco.mj_step(model, data)
 
+                # Log position for performance summary (after settle time)
+                if data.time >= settle_time:
+                    trajectory_log.append((data.time, data.qpos[:3].copy()))
+
                 # Print COM velocity every 0.5s
                 if int(data.time * 1000) % 500 == 0:
                     frame_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "frame")
-                    # vel = data.cvel[frame_id, 3:]  # linear velocity (cvel is [angular(3), linear(3)])
                     vel = data.qvel[0:3]
                     print(f"  t={data.time:.2f}s | vel: X={vel[0]:.4f} Y={vel[1]:.4f} Z={vel[2]:.4f} m/s | speed={np.linalg.norm(vel):.4f} m/s")
             
             viewer.sync()
+
+    # ── Performance gap summary ──────────────────────────────────────────────
+    print("\n" + "="*60)
+    print("PERFORMANCE SUMMARY")
+    print("="*60)
+
+    if len(trajectory_log) >= 2:
+        t_start, pos_start = trajectory_log[0]
+        t_end,   pos_end   = trajectory_log[-1]
+        dt = t_end - t_start
+
+        if dt > 1e-6:
+            dx = pos_end[0] - pos_start[0]
+            dy = pos_end[1] - pos_start[1]
+            dz = pos_end[2] - pos_start[2]
+
+            avg_x_vel = dx / dt
+            avg_y_vel = dy / dt
+            avg_z_vel = dz / dt
+
+            if mode in ("drive_side", "drive_sideways"):
+                target_vel = mode_cfg["actuator_target_ms"]
+                pct_diff = (abs(avg_y_vel) - target_vel) / abs(target_vel) * 100.0 if target_vel != 0 else float('inf')
+                print(f"  Mode            : drive_sideways")
+                print(f"  Settle time     : {settle_time:.2f}s  |  Active duration: {dt:.2f}s")
+                print(f"  Target Y vel    : {target_vel:.4f} m/s")
+                print(f"  Actual avg Y vel: {abs(avg_y_vel):.4f} m/s")
+                print(f"  Performance gap : {pct_diff:+.2f}%  ({'over' if pct_diff > 0 else 'under'}-speed)")
+                print(f"  Off-axis drift  : X={avg_x_vel:+.4f} m/s  Z={avg_z_vel:+.4f} m/s")
+
+            elif mode == "drive_up":
+                target_vel = mode_cfg["actuator_target_ms"]
+                pct_diff = (abs(avg_z_vel) - target_vel) / abs(target_vel) * 100.0 if target_vel != 0 else float('inf')
+                print(f"  Mode            : drive_up")
+                print(f"  Settle time     : {settle_time:.2f}s  |  Active duration: {dt:.2f}s")
+                print(f"  Target Z vel    : {target_vel:.4f} m/s")
+                print(f"  Actual avg Z vel: {abs(avg_z_vel):.4f} m/s")
+                print(f"  Performance gap : {pct_diff:+.2f}%  ({'over' if pct_diff > 0 else 'under'}-speed)")
+                print(f"  Off-axis drift  : X={avg_x_vel:+.4f} m/s  Y={avg_y_vel:+.4f} m/s")
+
+            elif mode == "hold":
+                total_movement = np.linalg.norm(pos_end - pos_start)
+                print(f"  Mode            : hold")
+                print(f"  Settle time     : {settle_time:.2f}s  |  Active duration: {dt:.2f}s")
+                print(f"  Target movement : 0.0000 m  (no slip)")
+                print(f"  Actual movement : {total_movement:.4f} m")
+                if total_movement > 1e-6:
+                    print(f"  Slip breakdown  : X={dx:+.4f} m  Y={dy:+.4f} m  Z={dz:+.4f} m")
+                else:
+                    print(f"  Result          : ✓ Robot held position successfully")
+
+            else:
+                print(f"  Mode: {mode}")
+                print(f"  Avg vel: X={avg_x_vel:+.4f}  Y={avg_y_vel:+.4f}  Z={avg_z_vel:+.4f} m/s")
+        else:
+            print("  Not enough post-settle data to compute performance gap.")
+    else:
+        print("  Simulation ended before settle time — no performance data.")
+
+    print("="*60 + "\n")
 
 
 def main():

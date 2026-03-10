@@ -39,7 +39,7 @@ MODES = {
     },
     "drive_up": {
         "actuator_mode": "velocity",
-        "actuator_target_ms": 2.0,
+        "actuator_target_ms": 1.0,
         "cost_function": "drive_up",
         "sim_duration": 10.0,
         "settle_time": 0.2,

@@ -8,6 +8,7 @@
     <material name="grid" texture="grid" texrepeat="5 5" reflectance="0.2"/>
     <texture name="skybox" type="skybox" builtin="gradient"
              rgb1="0.8 0.85 0.9" rgb2="0.95 0.95 0.95" width="512" height="512"/>
+    <mesh name="magnet_bracket" file="1102_PF_Magnet_Bracket.STL" scale="0.001 0.001 0.001"/>
   </asset>
 
   <option timestep="0.001" integrator="implicit" gravity="0 0 -9.81" />
@@ -27,48 +28,51 @@
     </body>
 
     <!-- Magnet + stick assembly: freejoint for full 6-DOF motion -->
-    <!-- Magnet center starts at z=0.0125 (face flush with plate top at z=0) -->
-    <body name="magnet" pos="0 0 0.0125">
+    <!-- Body origin at z=0.0170 (housing half-height), magnet offset -0.0025 so bottom face flush at z=0 -->
+    <body name="magnet" pos="0 0 0.0170">
       <freejoint name="magnet_free"/>
 
-      <!-- Magnet: r=31.5mm, half-height=12.5mm -->
-      <geom name="magnet_cyl" type="cylinder" size="0.0315 0.0125"
-            rgba="0.85 0.1 0.1 1" density="7500" />
+      <!-- Magnet: r=31.5mm, half-height=14.5mm, offset -2.5mm so bottom face flush with plate -->
+      <geom name="magnet_cyl" type="cylinder" size="0.0315 0.0145"
+            pos="0 0 -0.0025" rgba="0.85 0.1 0.1 1" density="7850" />
 
-      <!-- Stick: r=15mm, half-length=35mm, rigidly attached.
-           Stick center at z = 0.0125 (magnet half-h) + 0.035 (stick half-l) = 0.0475
-           above magnet center, so pos="0 0 0.0475" in body frame -->
-      <geom name="stick" type="cylinder" size="0.015 0.035"
-            pos="0 0 0.0475" rgba="0.3 0.6 0.9 1" density="1200" />
 
+      <!-- STL bracket mesh — non-colliding until position verified -->
+      <!-- euler: 180deg=3.141593 rad, 90deg=1.570796 rad, 0deg=0.0 rad -->
+      <geom name="bracket" type="mesh" mesh="magnet_bracket"
+            rgba="0.3 0.6 0.9 0.8" density="2700"
+            euler="-3.141593 1.570796 -1.570796"
+            pos="-0.07 0.03 0.018"
+            />
+            
       <!-- Sampling spheres (3 rings x 8 pts = 24). Non-colliding. -->
       <!-- Bottom ring (z=-0.0105): closest to plate -->
-      <geom type="sphere" size="0.002" pos=" 0.028500  0.000000 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos=" 0.020152  0.020152 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos=" 0.000000  0.028500 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos="-0.020152  0.020152 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos="-0.028500  0.000000 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos="-0.020152 -0.020152 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos=" 0.000000 -0.028500 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos=" 0.020152 -0.020152 -0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.028500  0.000000 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.020152  0.020152 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.000000  0.028500 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos="-0.020152  0.020152 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos="-0.028500  0.000000 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos="-0.020152 -0.020152 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.000000 -0.028500 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.020152 -0.020152 -0.017000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <!-- Middle ring (z=0) -->
-      <geom type="sphere" size="0.002" pos=" 0.028500  0.000000  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <!-- <geom type="sphere" size="0.002" pos=" 0.028500  0.000000  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos=" 0.020152  0.020152  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos=" 0.000000  0.028500  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos="-0.020152  0.020152  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos="-0.028500  0.000000  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos="-0.020152 -0.020152  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos=" 0.000000 -0.028500  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos=" 0.020152 -0.020152  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.020152 -0.020152  0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/> -->
       <!-- Top ring (z=+0.0105) -->
-      <geom type="sphere" size="0.002" pos=" 0.028500  0.000000  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <!-- <geom type="sphere" size="0.002" pos=" 0.028500  0.000000  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos=" 0.020152  0.020152  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos=" 0.000000  0.028500  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos="-0.020152  0.020152  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos="-0.028500  0.000000  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos="-0.020152 -0.020152  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
       <geom type="sphere" size="0.002" pos=" 0.000000 -0.028500  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
-      <geom type="sphere" size="0.002" pos=" 0.020152 -0.020152  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+      <geom type="sphere" size="0.002" pos=" 0.020152 -0.020152  0.010500" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/> -->
     </body>
   </worldbody>
 </mujoco>

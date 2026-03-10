@@ -1,0 +1,38 @@
+<mujoco model="sally_scene">
+    <compiler angle="radian" meshdir="assets" autolimits="true"/>
+
+    <visual>
+        <headlight diffuse="0.8 0.8 0.8" ambient="0.4 0.4 0.4" specular="0.2 0.2 0.2"/>
+        <map fogstart="1.0" fogend="3.0" znear="0.01" zfar="10.0" force="0.1"/>
+        <rgba haze="0.75 0.85 1.0 1"/>   <!-- blue haze -->
+    </visual>
+
+    <asset>
+        <!-- Checker grid floor texture -->
+        <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+                 rgb1="0.9 0.9 0.9" rgb2="0.7 0.7 0.7"/>
+        <material name="grid" texture="grid" texrepeat="5 5" reflectance="0.2"/>
+        <!-- Skybox: bright blue-to-white gradient -->
+        <texture name="skybox" type="skybox" builtin="gradient"
+                 rgb1="0.6 0.8 1.0" rgb2="1.0 1.0 1.0" width="512" height="3072"/>
+    </asset>
+
+    <option timestep="0.001" integrator="implicit" gravity="0 0 -9.81"/>
+
+    <default>
+        <geom condim="6" contype="1" conaffinity="1" friction="0.8 0.1 0.1" rgba="0.7 0.7 0.7 1"/>
+    </default>
+
+    <!-- For consistent viewer centering -->
+    <statistic center="0 0 0.3" extent="1.0"/>
+
+    <!-- Grid floor: Z up, top surface at z=0 -->
+    <worldbody>
+        <geom name="floor" type="plane" size="1 1 0.01" material="grid"
+              pos="0 0 -0.015" contype="0" conaffinity="0"/>
+    </worldbody>
+
+    <!-- Include the robot assembly -->
+    <include file="robot.xml"/>
+
+</mujoco>
