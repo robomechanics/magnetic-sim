@@ -9,9 +9,9 @@ Modes:
 import numpy as np
 from skopt.space import Real, Integer
 
-DEFAULT_MODE = "hold"
+# DEFAULT_MODE = "hold"
 # DEFAULT_MODE = "drive_sideways"
-# DEFAULT_MODE = "drive_up"
+DEFAULT_MODE = "drive_up"
 
 N_CALLS = 20
 WHEEL_RADIUS = 0.025
@@ -98,6 +98,6 @@ SEARCH_SPACE = [
     
     # Solver iterations (integer, uniform)
     Integer(5, 30, name='noslip_iterations'),
-    Real(100.0, 300.0, "uniform", name='max_force_per_wheel'),
+    Real(100.0, 1000.0, "uniform", name='max_force_per_wheel'),
 ]
 

@@ -2,13 +2,11 @@ from math import dist
 from xml.parsers.expat import model
 import mujoco
 import mujoco.viewer
-import time
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from copy import deepcopy
-import imageio
 import imageio.plugins.ffmpeg
-import pathlib
+
 
 from config import MODES, DEFAULT_MODE, DEFAULT_PARAMS
 
@@ -147,22 +145,26 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
         def simulation_step():
             data.xfrc_applied[:] = 0.0 
             
+            wheel_forces = {}  # body_id -> accumulated fvec
             for gid in wheel_gids:
-                if gid == -1 or gid >= model.ngeom:  # Add bounds check
+                if gid == -1 or gid >= model.ngeom:
                     continue
-                    
                 dist = mujoco.mj_geomDistance(model, data, gid, wall_id, 50, fromto)
-                
                 if dist < 0 or dist > max_magnetic_distance:
                     continue
-                # Calculate magnetic force and apply to the geom
                 fmag = calculate_magnetic_force(dist, Br, MAGNET_VOLUME, MU_0)
-                fmag = np.clip(fmag, 0.0, params['max_force_per_wheel'])
-
                 n = fromto[3:6] - fromto[0:3]
                 norm = np.linalg.norm(n)
-                if norm > 1e-10:
-                    data.xfrc_applied[model.geom_bodyid[gid], :3] = fmag * (n / norm)
+                if norm < 1e-10:
+                    continue
+                bid = model.geom_bodyid[gid]
+                wheel_forces[bid] = wheel_forces.get(bid, np.zeros(3)) + fmag * (n / norm)
+
+            for bid, fvec in wheel_forces.items():
+                total_mag = np.linalg.norm(fvec)
+                if total_mag > params['max_force_per_wheel']:
+                    fvec *= params['max_force_per_wheel'] / total_mag
+                data.xfrc_applied[bid, :3] += fvec
             # Actuator control for velocity mode
             # if mode_cfg["actuator_mode"] == "velocity":
             #     for act_id in wheel_act_ids:

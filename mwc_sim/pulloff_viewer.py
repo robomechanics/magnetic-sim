@@ -2,25 +2,26 @@
 pulloff_viewer.py - Interactive viewer for the pull-off test.
 Called automatically by pulloff_sim.py, or run standalone.
 
-Controls: ENTER to start, SPACE to pause/resume.
+Pull force applied at magnet body COM (+Z). Displacement tracked as
+change in magnet COM Z from ramp start.
+
+Controls: ENTER or SPACE to start/pause.
 """
 
-from pyexpat import model
 import time
 import numpy as np
 import mujoco
 import mujoco.viewer
 
 from pulloff_sim import (
-    XMLPATH, PARAMS, SETTLE_TIME, SIM_DURATION,
-    DETACH_DIST, DETACH_HOLD,
+    PARAMS, SETTLE_TIME, SIM_DURATION,
+    DETACH_DIST, DETACH_HOLD, PULL_RATE,
     setup_model, apply_mag, mag_force,
 )
 
-REAL_TIME_FACTOR = 2.0   # 0.8 = slight slow-mo; 1.0 = real time
-
-ARROW_RADIUS = 0.004
-key_state    = {"paused": True}
+REAL_TIME_FACTOR = 2.0
+ARROW_RADIUS     = 0.004
+key_state        = {"paused": True}
 
 
 def key_callback(keycode):
@@ -50,13 +51,13 @@ def add_arrow(scene, start, end, rgba):
 
 
 def run_viewer(pull_rate):
-    model, data, plate_id, magnet_id, joint_id, sphere_gids = setup_model()
-    fromto   = np.zeros(6)
-    dt_sim   = float(model.opt.timestep)
-    dt_wall  = dt_sim / REAL_TIME_FACTOR
+    model, data, plate_id, magnet_id, sphere_gids = setup_model()
+    fromto  = np.zeros(6)
+    dt_sim  = float(model.opt.timestep)
+    dt_wall = dt_sim / REAL_TIME_FACTOR
 
-    model.vis.map.znear = 0.001
-    model.vis.map.zfar  = 10.0
+    model.vis.map.znear            = 0.001
+    model.vis.map.zfar             = 10.0
     model.vis.headlight.ambient[:] = [0.6, 0.6, 0.6]
     model.vis.headlight.diffuse[:] = [1.0, 1.0, 1.0]
 
@@ -85,54 +86,65 @@ def run_viewer(pull_rate):
             v.user_scn.ngeom = 0
             data.xfrc_applied[:] = 0.0
 
-            # Magnetic forces — blue arrows per sphere
-            f_mag_z      = 0.0
-            magnet_pos   = data.xpos[magnet_id].copy()
-            for gid in sphere_gids:
-                dist = mujoco.mj_geomDistance(model, data, gid, plate_id, 50.0, fromto)
-                if dist <= 0 or dist > PARAMS['max_magnetic_distance']:
-                    continue
-                f    = np.clip(mag_force(dist, PARAMS['Br']), 0.0, PARAMS['max_force_per_wheel'])
-                n    = fromto[3:6] - fromto[0:3]
-                norm = np.linalg.norm(n)
-                if norm < 1e-10:
-                    continue
-                fvec = f * (n / norm)
-                data.xfrc_applied[magnet_id, :3] += fvec
-                f_mag_z += fvec[2]
+            # Magnetic forces — accumulate total vector, clip, apply, draw blue arrows.
+            # Mirrors apply_mag() but inlined to expose per-sphere positions for arrows.
+            fvec_total = np.zeros(3)
+            fvec_list  = []
+            if data.time >= SETTLE_TIME / 2:
+                for gid in sphere_gids:
+                    dist = mujoco.mj_geomDistance(model, data, gid, plate_id, 50.0, fromto)
+                    if dist <= 0 or dist > PARAMS['max_magnetic_distance']:
+                        continue
+                    f    = mag_force(dist, PARAMS['Br'])
+                    n    = fromto[3:6] - fromto[0:3]
+                    norm = np.linalg.norm(n)
+                    if norm < 1e-10:
+                        continue
+                    nd = n / norm
+                    fvec_list.append((f, nd, data.geom_xpos[gid].copy()))
+                    fvec_total += f * nd
 
-                sphere_pos = data.geom_xpos[gid].copy()
-                arrow_len  = max(0.002, 0.001 * f)
-                add_arrow(v.user_scn, sphere_pos, sphere_pos + arrow_len * (n / norm), (0.1, 0.4, 0.9, 0.9))
+                # Clip total assembly force, not per-sphere
+                total_mag = np.linalg.norm(fvec_total)
+                scale     = min(1.0, PARAMS['max_force_per_wheel'] / total_mag) if total_mag > 1e-10 else 1.0
+                data.xfrc_applied[magnet_id, :3] += fvec_total * scale
 
-            # Pull force ramp — red arrow upward
+                for f, nd, sp in fvec_list:
+                    arrow_len = max(0.002, 0.001 * f * scale)
+                    add_arrow(v.user_scn, sp, sp + arrow_len * nd, (0.1, 0.4, 0.9, 0.9))
+
+            f_mag_z = (fvec_total * scale)[2] if (fvec_total.any() and data.time >= SETTLE_TIME / 2) else 0.0
+
+            # Pull force ramp — red arrow upward from COM
             f_pull = 0.0
             if data.time >= SETTLE_TIME:
                 if not ramp_started:
                     ramp_started = True
                     ramp_t0      = data.time
-                    z0           = data.qpos[model.jnt_qposadr[joint_id]]
+                    z0           = data.xpos[magnet_id][2]
+
                 t_ramp = data.time - ramp_t0
                 f_pull = pull_rate * t_ramp
-                data.xfrc_applied[magnet_id, 2] += f_pull
+                data.xfrc_applied[magnet_id, 2] += f_pull   # upward at COM
 
+                com_pos   = data.xpos[magnet_id].copy()
                 arrow_len = max(0.005, 0.005 * f_pull / 10.0)
-                add_arrow(v.user_scn, magnet_pos, magnet_pos + np.array([0, 0, arrow_len]), (0.9, 0.1, 0.1, 0.9))
+                add_arrow(v.user_scn, com_pos, com_pos + np.array([0, 0, arrow_len]), (0.9, 0.1, 0.1, 0.9))
 
                 if not separated:
                     pulloff_force = max(pulloff_force, f_pull)
 
             mujoco.mj_step(model, data)
 
-            # Detachment: 5mm lift sustained for 1s
-            z_disp = data.qpos[model.jnt_qposadr[joint_id]] - z0
+            # Detachment check: COM Z displacement sustained above DETACH_DIST
+            z_disp_mm = (data.xpos[magnet_id][2] - z0) * 1000   # mm
             if ramp_started and not separated:
-                if z_disp > DETACH_DIST / 1000:  # convert mm -> m
+                if z_disp_mm > DETACH_DIST:
                     if lift_start is None:
                         lift_start = data.time
                     elif data.time - lift_start >= DETACH_HOLD:
                         separated = True
-                        print(f"*** DETACHED | Peak: {pulloff_force:.2f} N | disp: {z_disp*1000:.3f} mm ***")
+                        print(f"*** DETACHED | Peak: {pulloff_force:.2f} N | disp: {z_disp_mm:.3f} mm ***")
                 else:
                     lift_start = None
 
@@ -140,7 +152,7 @@ def run_viewer(pull_rate):
             if data.time - last_print >= 0.1:
                 last_print = data.time
                 phase = "SEPARATED" if separated else ("RAMP" if ramp_started else "SETTLE")
-                print(f"t={data.time:.2f}s [{phase}] F_pull={f_pull:.1f} N  F_mag={-f_mag_z:.1f} N  z_disp={z_disp*1000:.2f} mm")
+                print(f"t={data.time:.2f}s [{phase}] F_pull={f_pull:.1f} N  F_mag={-f_mag_z:.1f} N  z_disp={z_disp_mm:.2f} mm")
 
             v.sync()
             elapsed = time.perf_counter() - step_start
@@ -151,7 +163,6 @@ def run_viewer(pull_rate):
 
 if __name__ == "__main__":
     import argparse
-    from pulloff_sim import PULL_RATE
     parser = argparse.ArgumentParser()
     parser.add_argument('--pull-rate', type=float, default=PULL_RATE)
     args = parser.parse_args()
