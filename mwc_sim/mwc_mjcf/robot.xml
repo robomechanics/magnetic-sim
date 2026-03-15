@@ -22,29 +22,29 @@
     <!-- Magnet bracket -->
     <body name="1102___pf___magnet_bracket" pos="-0.0660751 0.00635001 0.000345108">
       <geom type="mesh" class="visual" mesh="1102___pf___magnet_bracket"/>
-      <geom type="mesh" class="collision" mesh="1102___pf___magnet_bracket"/>
+      <geom type="mesh" class="collision" mesh="1102___pf___magnet_bracket" density="1250"/>
     </body>
 
     <!-- Roller chain attachment 1 -->
     <body name="1101___pp___roller_chain_1" pos="-0.126746 0 -0.0091799" quat="0.707107 0 -0.707107 0">
       <geom type="mesh" class="visual" mesh="1101___pp___roller_chain_attachment_link__7321k1"/>
-      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1"/>
+      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1" density="1250"/>
       <geom type="mesh" class="visual" mesh="1101___pp___roller_chain_attachment_link__7321k1__2"/>
-      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1__2"/>
+      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1__2" density="1250"/>
     </body>
 
     <!-- Roller chain attachment 2 -->
     <body name="1101___pp___roller_chain_2" pos="-0.00540385 0 0.0098701" quat="0.707107 0 0.707107 0">
       <geom type="mesh" class="visual" mesh="1101___pp___roller_chain_attachment_link__7321k1"/>
-      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1"/>
+      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1" density="1250"/>
       <geom type="mesh" class="visual" mesh="1101___pp___roller_chain_attachment_link__7321k1__2"/>
-      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1__2"/>
+      <geom type="mesh" class="collision" mesh="1101___pp___roller_chain_attachment_link__7321k1__2" density="1250"/>
     </body>
 
     <!-- Electromagnet (AWS PEM 215lbs EML63mm) — rigid, no joint -->
     <body name="1103___pp___aws_pem_215lbs__eml63mm_24" pos="-0.066075 -0.0176499 0.000345139">
       <geom type="mesh" class="visual" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
-      <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+      <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7800"/>
 
       <!-- Bottom ring sampling spheres: ring in XZ plane, Y is face-normal offset -->
       <!-- RADIUS=0.025, EMBED_R=0.003 → ring_r=0.022; HALF_HEIGHT=0.0125, EMBED_Z=0.002 → y=+0.0105 -->

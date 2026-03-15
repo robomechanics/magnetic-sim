@@ -21,7 +21,7 @@ from wrench_config import (
     TIMESTEP, PULL_RATE, SETTLE_TIME, SIM_DURATION,
     DETACH_HOLD, DETACH_THRESHOLD,
     APPLY_FORCE, APPLY_MOMENT,
-    PARAMS, ACTIVE_PRESET,
+    PARAMS, ACTIVE_PRESET, PEEL_R
 )
 
 
@@ -32,24 +32,33 @@ def mag_force(dist, Br):
     return (3 * MU_0 * m**2) / (2 * np.pi * (2 * dist)**4)
 
 
-def setup_model():
-    print(f"[setup_model] Loading: {SCENE_XML}  (preset: {ACTIVE_PRESET})")
+def setup_model(params):
+    """Load the MuJoCo model and apply parameters.
+
+    Args:
+        params: PARAMS dict to apply. Must be provided — no fallback.
+
+    Returns:
+        model, data, plate_id, magnet_id, sphere_gids, tip_site_id
+    """
     model = mujoco.MjModel.from_xml_path(SCENE_XML)
     data  = mujoco.MjData(model)
     model.opt.timestep = TIMESTEP
 
-    plate_id    = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, PLATE_GEOM_NAME)
-    magnet_id   = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, MAGNET_BODY_NAME)
-    tip_site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, TIP_SITE_NAME)
+    plate_id    = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM,  PLATE_GEOM_NAME)
+    magnet_id   = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY,  MAGNET_BODY_NAME)
+    tip_site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE,  TIP_SITE_NAME)
 
     if plate_id    == -1: raise ValueError(f"'{PLATE_GEOM_NAME}' geom not found")
     if magnet_id   == -1: raise ValueError(f"'{MAGNET_BODY_NAME}' body not found")
     if tip_site_id == -1: raise ValueError(f"'{TIP_SITE_NAME}' site not found")
 
-    model.geom_friction[plate_id] = PARAMS['ground_friction']
-    model.opt.o_solref             = PARAMS['solref']
-    model.opt.o_solimp             = PARAMS['solimp']
-    model.opt.noslip_iterations    = PARAMS['noslip_iterations']
+    model.geom_friction[plate_id] = params['ground_friction']
+    model.opt.o_solref             = params['solref']
+    model.opt.o_solimp             = params['solimp']
+    model.opt.noslip_iterations    = params['noslip_iterations']
+    model.opt.noslip_tolerance     = params['noslip_tolerance']
+    model.opt.o_margin             = params['margin']
 
     # Collect all sphere geoms on the magnet body — these are the force sampling points.
     sphere_gids = [
@@ -60,15 +69,20 @@ def setup_model():
     return model, data, plate_id, magnet_id, sphere_gids, tip_site_id
 
 
-def apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto):
-    """Apply dipole-dipole forces to magnet body. Returns total force magnitude."""
+def apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto, params):
+    """Apply dipole-dipole forces to magnet body. Returns total force magnitude.
+
+    Args:
+        params: PARAMS dict containing 'Br', 'max_magnetic_distance', 'max_force_per_wheel'.
+                Must be provided — no fallback.
+    """
     fvec_total = np.zeros(3)
     total      = 0.0
     for gid in sphere_gids:
         dist = mujoco.mj_geomDistance(model, data, gid, plate_id, 50.0, fromto)
-        if dist <= 0 or dist > PARAMS['max_magnetic_distance']:
+        if dist <= 0 or dist > params['max_magnetic_distance']:
             continue
-        f    = mag_force(dist, PARAMS['Br'])
+        f    = mag_force(dist, params['Br'])
         n    = fromto[3:6] - fromto[0:3]
         norm = np.linalg.norm(n)
         if norm < 1e-10:
@@ -78,9 +92,9 @@ def apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto):
 
     # Clip total assembly force, not per-sphere
     total_mag = np.linalg.norm(fvec_total)
-    if total_mag > PARAMS['max_force_per_wheel']:
-        fvec_total *= PARAMS['max_force_per_wheel'] / total_mag
-        total       = PARAMS['max_force_per_wheel']
+    if total_mag > params['max_force_per_wheel']:
+        fvec_total *= params['max_force_per_wheel'] / total_mag
+        total       = params['max_force_per_wheel']
 
     data.xfrc_applied[magnet_id, :3] += fvec_total
     return total
@@ -98,7 +112,8 @@ def apply_wrench_force(model, data, magnet_id, f_pull, tip_site_id):
     """
     tip_world = data.site_xpos[tip_site_id].copy()
     force_vec = np.array([f_pull, 0.0, 0.0])
-    r         = tip_world - data.xpos[magnet_id]
+    # r         = tip_world - data.xpos[magnet_id]
+    r = np.array([0.0, 0.0, PEEL_R])
     moment    = np.cross(r, force_vec)
 
     if APPLY_FORCE:
@@ -107,59 +122,113 @@ def apply_wrench_force(model, data, magnet_id, f_pull, tip_site_id):
         data.xfrc_applied[magnet_id, 3:] += moment
 
 
-def run_headless(pull_rate=PULL_RATE):
-    model, data, plate_id, magnet_id, sphere_gids, tip_site_id = setup_model()
+def run_headless(pull_rate, params):
+    """Run headless wrench simulation and return records and detachment metrics.
+
+    Args:
+        pull_rate: Force ramp rate in N/s. Must be provided — no fallback.
+        params:    PARAMS dict from point_to_params(). Must be provided — no fallback.
+
+    Returns:
+        records:        list of per-step dicts with 't', 'f_pull', 'moment', 'f_mag', 'xy_pos'
+        detach_force:   peak horizontal force at detachment (N)
+        detach_moment:  peak moment magnitude at detachment (N·m)
+        xy_drift:       total XY displacement of magnet COM from end of settle to detachment (m)
+    """
+    model, data, plate_id, magnet_id, sphere_gids, tip_site_id = setup_model(params)
     fromto = np.zeros(6)
 
+    # DEBUG
+    # print(f"[DBG timing] TIMESTEP={TIMESTEP}  SETTLE_TIME={SETTLE_TIME}  model_dt={model.opt.timestep:.6f}", flush=True)
+
     # Phase 1: gravity only — magnet falls onto plate.
+    step_count = 0
     while data.time < SETTLE_TIME / 2:
         data.xfrc_applied[:] = 0.0
         mujoco.mj_step(model, data)
+        step_count += 1
+
+    # DEBUG
+    # print(f"[DBG phase1] steps={step_count}  final_time={data.time:.4f}s  z={data.xpos[magnet_id][2]:.4f}m", flush=True)
 
     # Phase 2: magnetic force engages — magnet snaps and settles against plate.
     while data.time < SETTLE_TIME:
         data.xfrc_applied[:] = 0.0
-        apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto)
+        apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto, params)
         mujoco.mj_step(model, data)
 
-    ramp_t0      = data.time
-    records      = []
-    detach_force = 0.0
-    separated    = False
-    detach_start = None
+    # DEBUG: check if magnet is even close to plate after settle
+    # print(f"[DBG settle] magnet z={data.xpos[magnet_id][2]:.4f}m | n_spheres={len(sphere_gids)}", flush=True)
+    # Check distance from each sphere to plate
+    for gid in sphere_gids[:3]:  # just first 3
+        dist = mujoco.mj_geomDistance(model, data, gid, plate_id, 50.0, fromto)
+        # print(f"  sphere {gid} dist={dist:.5f}m  max_allowed={params['max_magnetic_distance']:.5f}m", flush=True)
+
+    # Record XY position at end of settle phase — drift is measured from here.
+    xy_settle_pos = data.xpos[magnet_id][:2].copy()
+
+    ramp_t0       = data.time
+    records       = []
+    detach_force  = 0.0
+    detach_moment = 0.0
+    xy_drift      = 0.0
+    separated     = False
+    detach_start  = None
 
     while data.time < SIM_DURATION:
         data.xfrc_applied[:] = 0.0
-        f_mag  = apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto)
+        f_mag  = apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto, params)
 
-        t_ramp = data.time - ramp_t0
-        f_pull = pull_rate * t_ramp
+        t_ramp     = data.time - ramp_t0
+        f_pull     = pull_rate * t_ramp
+        tip_world  = data.site_xpos[tip_site_id].copy()
+        r          = tip_world - data.xpos[magnet_id]
+        moment_vec = np.cross(r, np.array([f_pull, 0.0, 0.0]))
+        moment_mag = float(np.linalg.norm(moment_vec))
+
         apply_wrench_force(model, data, magnet_id, f_pull, tip_site_id)
+
+        # Track XY drift of magnet COM relative to settled position
+        current_xy    = data.xpos[magnet_id][:2].copy()
+        current_drift = float(np.linalg.norm(current_xy - xy_settle_pos))
 
         records.append({
             't':      t_ramp,
             'f_pull': f_pull,
             'moment': f_pull * LEVER_ARM,
             'f_mag':  f_mag,
+            'xy_pos': current_xy.copy(),
         })
 
         if not separated:
-            detach_force = max(detach_force, f_pull)
             if f_mag < DETACH_THRESHOLD:
                 if detach_start is None:
-                    detach_start = data.time
+                    detach_start  = data.time
+                    detach_force  = max(detach_force,  f_pull)
+                    detach_moment = max(detach_moment, moment_mag)
+                    xy_drift      = max(xy_drift, current_drift)
                 elif data.time - detach_start >= DETACH_HOLD:
                     separated = True
-                    print(f"Detached | force: {detach_force:.2f} N | moment: {f_pull * LEVER_ARM:.3f} Nm")
+                    print(
+                        f"Detached | force: {detach_force:.2f} N | "
+                        f"moment: {detach_moment:.3f} Nm | "
+                        f"xy_drift: {xy_drift*1000:.2f} mm | "
+                        f"f_mag: {f_mag:.4f} N | "
+                        f"t_ramp: {data.time - ramp_t0:.3f} s"
+                    )
+                    break
             else:
-                detach_start = None
+                detach_start  = None
+                detach_force  = max(detach_force,  f_pull)
+                detach_moment = max(detach_moment, moment_mag)
+                xy_drift      = max(xy_drift, current_drift)
 
         mujoco.mj_step(model, data)
 
     if not separated:
-        print(f"No detachment. Max force: {detach_force:.2f} N")
+        print(f"No detachment. Max force: {detach_force:.2f} N | Max moment: {detach_moment:.3f} Nm")
 
-    return records, detach_force
+    return records, detach_force, detach_moment, xy_drift
 
 
 def smooth(data, window=800):
@@ -168,7 +237,7 @@ def smooth(data, window=800):
     return np.convolve(arr, np.ones(window) / window, mode="same")
 
 
-def plot(records, detach_force, pull_rate):
+def plot(records, detach_force, pull_rate, params):
     t      = np.array([r['t']      for r in records])
     f_pull = np.array([r['f_pull'] for r in records])
     moment = np.array([r['moment'] for r in records])
@@ -179,7 +248,7 @@ def plot(records, detach_force, pull_rate):
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     fig.suptitle(
-        f"Wrench/Peel Test  |  Preset: {ACTIVE_PRESET}  |  Br={PARAMS['Br']:.3f} T  |  "
+        f"Wrench/Peel Test  |  Preset: {ACTIVE_PRESET}  |  Br={params['Br']:.3f} T  |  "
         f"Ramp={pull_rate} N/s  |  Detach={detach_force:.1f} N  |  "
         f"Lever={LEVER_ARM * 100:.1f} cm",
         fontweight="bold", fontsize=11
@@ -212,11 +281,11 @@ if __name__ == "__main__":
     parser.add_argument('--pull-rate', type=float, default=PULL_RATE)
     args = parser.parse_args()
 
-    print(f"Running wrench simulation (pull_rate={args.pull_rate} N/s)...")
-    records, detach_force = run_headless(args.pull_rate)
+    print(f"Running wrench simulation (pull_rate={args.pull_rate} N/s, preset={ACTIVE_PRESET})...")
+    records, detach_force, detach_moment, xy_drift = run_headless(args.pull_rate, PARAMS)
 
     print("Launching viewer...")
     import wrench_viewer
     wrench_viewer.run_viewer(args.pull_rate)
 
-    plot(records, detach_force, args.pull_rate)
+    plot(records, detach_force, args.pull_rate, PARAMS)

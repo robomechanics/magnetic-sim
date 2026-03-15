@@ -1,0 +1,2 @@
+timestamp,elapsed_min,n_eval,id,cost,elapsed_min,pulloff_force,detach_cost,achieved,goal,shortfall,sliding_friction,torsional_friction,rolling_friction,solref_timeconst,solimp_dmin,solimp_width,solimp_midpoint,solimp_power,noslip_iterations,noslip_tolerance,margin,Br,max_magnetic_distance,max_force_per_wheel
+2026-03-14T19:50:27,0.17,20,d5e86050,0.000000,0.17,966.7200,0.000000,966.7200,956.3700,0.000000,0.13056312,0.0025684349,1.1387811e-05,0.0019232885,0.36180639,0.00065636034,0.6030877,3.9710747,30.097228,2.4236595e-05,0.0014990809,1.3266467,0.070616101,917.21552

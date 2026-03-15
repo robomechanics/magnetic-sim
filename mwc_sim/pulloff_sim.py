@@ -15,53 +15,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import mujoco
 
-MU_0          = 4 * np.pi * 1e-7
-MAGNET_VOLUME = np.pi * (0.0315 ** 2) * 0.025   # r=31.5mm, h=25mm
-SCENE_XML     = "mwc_mjcf/scene.xml"
-PULL_RATE     = 20.0   # N/s
-SETTLE_TIME   = 2.0    # s — two-phase: gravity only (0→0.5s), then mag engages (0.5→1.0s)
-SIM_DURATION  = 100.0  # s — hard stop
-DETACH_DIST   = 10.0   # mm — min COM-Z displacement to count as detached
-DETACH_HOLD   = 1.0    # s  — must stay above DETACH_DIST for this long
-
-# ---------------------------------------------------------------------------
-# PARAMS PRESETS — uncomment one block, keep the others commented out.
-# All values are Bayesian-optimized against physical hardware experiments.
-# ---------------------------------------------------------------------------
-
-# --- Hold (active) ---
-# PARAMS = {
-#     'ground_friction':       [0.9, 0.034585, 0.001734],
-#     'solref':                [0.000572, 10.000000],
-#     'solimp':                [0.860956, 0.987761, 0.000100, 0.5, 1.0],
-#     'noslip_iterations':     20,
-#     'Br':                    1.332000,
-#     'max_magnetic_distance': 0.011413,
-#     'max_force_per_wheel':   139.324024,
-# }
-
-# --- Drive sideways ---
-# PARAMS = {
-#     'ground_friction':       [0.975785, 0.000342, 0.000372],
-#     'solref':                [0.000129, 33.807584],
-#     'solimp':                [0.875461, 0.934908, 0.002193, 0.5, 1.0],
-#     'noslip_iterations':     20,
-#     'Br':                    1.476441,
-#     'max_magnetic_distance': 0.029736,
-#     'max_force_per_wheel':   264.173934,
-# }
-
-# --- Drive up ---
-PARAMS = {
-    'ground_friction': [0.973464, 0.000202, 0.000010],
-    'solref': [0.000100, 10.000000],
-    'solimp': [0.926007, 0.943979, 0.001311, 0.5, 1.0],
-    'noslip_iterations': 23,
-    'Br': 1.599175,
-    'max_magnetic_distance': 0.018389,
-    'max_force_per_wheel': 205.270447,
-}
-
+from pulloff_config import (
+    MU_0, MAGNET_VOLUME,
+    SCENE_XML, MAGNET_BODY_NAME, PLATE_GEOM_NAME,
+    TIMESTEP, PULL_RATE, SETTLE_TIME, SIM_DURATION,
+    DETACH_DIST, DETACH_HOLD,
+    PARAMS, ACTIVE_PRESET,
+)
 
 
 def mag_force(dist, Br):
@@ -71,22 +31,31 @@ def mag_force(dist, Br):
     return (3 * MU_0 * m**2) / (2 * np.pi * (2 * dist)**4)
 
 
-def setup_model():
-    print(f"[setup_model] Loading: {SCENE_XML}")
+def setup_model(params):
+    """Load the MuJoCo model and apply parameters.
+
+    Args:
+        params: PARAMS dict to apply. Must be provided — no fallback.
+
+    Returns:
+        model, data, plate_id, magnet_id, sphere_gids
+    """
     model = mujoco.MjModel.from_xml_path(SCENE_XML)
     data  = mujoco.MjData(model)
-    model.opt.timestep = 0.0005  # 2000 Hz
+    model.opt.timestep = TIMESTEP
 
-    plate_id  = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "plate_geom")
-    magnet_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "1103___pp___aws_pem_215lbs__eml63mm_24")
+    plate_id  = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, PLATE_GEOM_NAME)
+    magnet_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, MAGNET_BODY_NAME)
 
-    if plate_id  == -1: raise ValueError("'plate_geom' not found")
-    if magnet_id == -1: raise ValueError("'1103___pp___aws_pem_215lbs__eml63mm_24' body not found")
+    if plate_id  == -1: raise ValueError(f"'{PLATE_GEOM_NAME}' geom not found")
+    if magnet_id == -1: raise ValueError(f"'{MAGNET_BODY_NAME}' body not found")
 
-    model.geom_friction[plate_id] = PARAMS['ground_friction']
-    model.opt.o_solref             = PARAMS['solref']
-    model.opt.o_solimp             = PARAMS['solimp']
-    model.opt.noslip_iterations    = PARAMS['noslip_iterations']
+    model.geom_friction[plate_id]   = params['ground_friction']
+    model.opt.o_solref               = params['solref']
+    model.opt.o_solimp               = params['solimp']
+    model.opt.noslip_iterations      = params['noslip_iterations']
+    model.opt.noslip_tolerance       = params['noslip_tolerance']
+    model.opt.o_margin               = params['margin']
 
     # Collect all sphere geoms on the magnet body — these are the force sampling points.
     sphere_gids = [
@@ -97,18 +66,19 @@ def setup_model():
     return model, data, plate_id, magnet_id, sphere_gids
 
 
-def apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto):
-    """Apply dipole-dipole forces to magnet body.
+def apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto, params):
+    """Apply dipole-dipole forces to magnet body. Returns Fz (negative = toward plate).
 
-    Clips the total assembly force vector (not per-sphere) to max_force_per_wheel.
-    Returns the Z component of the applied force (negative = toward plate).
+    Args:
+        params: PARAMS dict containing 'Br', 'max_magnetic_distance', 'max_force_per_wheel'.
+                Must be provided — no fallback.
     """
     fvec_total = np.zeros(3)
     for gid in sphere_gids:
         dist = mujoco.mj_geomDistance(model, data, gid, plate_id, 50.0, fromto)
-        if dist <= 0 or dist > PARAMS['max_magnetic_distance']:
+        if dist <= 0 or dist > params['max_magnetic_distance']:
             continue
-        f    = mag_force(dist, PARAMS['Br'])
+        f    = mag_force(dist, params['Br'])
         n    = fromto[3:6] - fromto[0:3]
         norm = np.linalg.norm(n)
         if norm < 1e-10:
@@ -117,15 +87,28 @@ def apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto):
 
     # Clip total assembly force, not per-sphere
     total_mag = np.linalg.norm(fvec_total)
-    if total_mag > PARAMS['max_force_per_wheel']:
-        fvec_total *= PARAMS['max_force_per_wheel'] / total_mag
+    if total_mag > params['max_force_per_wheel']:
+        fvec_total *= params['max_force_per_wheel'] / total_mag
 
     data.xfrc_applied[magnet_id, :3] += fvec_total
     return fvec_total[2]   # Fz (negative = attraction toward plate)
 
 
-def run_headless(pull_rate=PULL_RATE):
-    model, data, plate_id, magnet_id, sphere_gids = setup_model()
+def run_headless(pull_rate=PULL_RATE, params=None):
+    """Run headless pull-off simulation and return records and peak pull-off force.
+
+    Args:
+        pull_rate: Force ramp rate in N/s.
+        params:    PARAMS dict. Falls back to module-level PARAMS if not provided.
+
+    Returns:
+        records:       list of per-step dicts with 't', 'f_pull', 'f_mag', 'z_disp'
+        pulloff_force: peak pull force at detachment (N)
+    """
+    if params is None:
+        params = PARAMS
+
+    model, data, plate_id, magnet_id, sphere_gids = setup_model(params)
     fromto = np.zeros(6)
 
     # Phase 1: gravity only — magnet falls onto plate.
@@ -136,7 +119,7 @@ def run_headless(pull_rate=PULL_RATE):
     # Phase 2: magnetic force engages — magnet snaps and settles against plate.
     while data.time < SETTLE_TIME:
         data.xfrc_applied[:] = 0.0
-        apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto)
+        apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto, params)
         mujoco.mj_step(model, data)
 
     z0            = data.xpos[magnet_id][2]   # COM Z at ramp start
@@ -148,7 +131,7 @@ def run_headless(pull_rate=PULL_RATE):
 
     while data.time < SIM_DURATION:
         data.xfrc_applied[:] = 0.0
-        f_mag_z = apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto)
+        f_mag_z = apply_mag(model, data, sphere_gids, plate_id, magnet_id, fromto, params)
 
         t_ramp = data.time - ramp_t0
         f_pull = pull_rate * t_ramp
@@ -166,6 +149,7 @@ def run_headless(pull_rate=PULL_RATE):
                 elif data.time - lift_start >= DETACH_HOLD:
                     separated = True
                     print(f"Detached | pull-off force: {pulloff_force:.2f} N | disp: {z_disp:.3f} mm")
+                    break
             else:
                 lift_start = None
 
@@ -182,7 +166,7 @@ def smooth(data, window=200):
     return np.convolve(arr, np.ones(window) / window, mode="same")
 
 
-def plot(records, pulloff_force, pull_rate):
+def plot(records, pulloff_force, pull_rate, params):
     t      = np.array([r["t"]      for r in records])
     f_pull = np.array([r["f_pull"] for r in records])
     f_mag  = np.array([r["f_mag"]  for r in records])
@@ -201,7 +185,7 @@ def plot(records, pulloff_force, pull_rate):
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     fig.suptitle(
-        f"Magnetic Pull-Off Test  |  Br={PARAMS['Br']:.3f} T  |  "
+        f"Magnetic Pull-Off Test  |  Preset: {ACTIVE_PRESET}  |  Br={params['Br']:.3f} T  |  "
         f"Ramp={pull_rate} N/s  |  Pull-off={pulloff_force:.1f} N",
         fontweight="bold", fontsize=12
     )
@@ -242,11 +226,11 @@ if __name__ == "__main__":
     parser.add_argument('--pull-rate', type=float, default=PULL_RATE)
     args = parser.parse_args()
 
-    print(f"Running simulation (pull_rate={args.pull_rate} N/s)...")
-    records, pulloff_force = run_headless(args.pull_rate)
+    print(f"Running simulation (pull_rate={args.pull_rate} N/s, preset={ACTIVE_PRESET})...")
+    records, pulloff_force = run_headless(args.pull_rate, PARAMS)
 
     print("Launching viewer...")
     import pulloff_viewer
     pulloff_viewer.run_viewer(args.pull_rate)
 
-    plot(records, pulloff_force, args.pull_rate)
+    plot(records, pulloff_force, args.pull_rate, PARAMS)

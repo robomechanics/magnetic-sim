@@ -75,7 +75,9 @@ def add_label(scene, text, pos):
 
 
 def run_viewer(pull_rate):
-    model, data, plate_id, magnet_id, sphere_gids, tip_site_id = setup_model()
+    from wrench_config import PARAMS
+    model, data, plate_id, magnet_id, sphere_gids, tip_site_id = setup_model(PARAMS)
+
     fromto  = np.zeros(6)
     dt_sim  = float(model.opt.timestep)
     dt_wall = dt_sim / REAL_TIME_FACTOR

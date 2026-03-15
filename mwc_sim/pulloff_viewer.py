@@ -5,6 +5,10 @@ Called automatically by pulloff_sim.py, or run standalone.
 Pull force applied at magnet body COM (+Z). Displacement tracked as
 change in magnet COM Z from ramp start.
 
+Arrows:
+  Blue — magnetic attraction force at each sampling sphere
+  Red  — applied upward pull force at magnet COM
+
 Controls: ENTER or SPACE to start/pause.
 """
 
@@ -13,15 +17,16 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 
-from pulloff_sim import (
+from pulloff_config import (
     PARAMS, SETTLE_TIME, SIM_DURATION,
     DETACH_DIST, DETACH_HOLD, PULL_RATE,
-    setup_model, apply_mag, mag_force,
+    REAL_TIME_FACTOR, ARROW_RADIUS,
+    MAG_ARROW_SCALE, FORCE_ARROW_SCALE,
+    TELEMETRY_INTERVAL,
 )
+from pulloff_sim import setup_model, apply_mag, mag_force
 
-REAL_TIME_FACTOR = 2.0
-ARROW_RADIUS     = 0.004
-key_state        = {"paused": True}
+key_state = {"paused": True}
 
 
 def key_callback(keycode):
@@ -50,8 +55,10 @@ def add_arrow(scene, start, end, rgba):
     scene.ngeom += 1
 
 
-def run_viewer(pull_rate):
-    model, data, plate_id, magnet_id, sphere_gids = setup_model()
+def run_viewer(pull_rate=PULL_RATE):
+    from pulloff_config import PARAMS
+    model, data, plate_id, magnet_id, sphere_gids = setup_model(PARAMS)
+
     fromto  = np.zeros(6)
     dt_sim  = float(model.opt.timestep)
     dt_wall = dt_sim / REAL_TIME_FACTOR
@@ -86,8 +93,7 @@ def run_viewer(pull_rate):
             v.user_scn.ngeom = 0
             data.xfrc_applied[:] = 0.0
 
-            # Magnetic forces — accumulate total vector, clip, apply, draw blue arrows.
-            # Mirrors apply_mag() but inlined to expose per-sphere positions for arrows.
+            # ── Magnetic forces — blue arrows per sphere ──────────────────────
             fvec_total = np.zeros(3)
             fvec_list  = []
             if data.time >= SETTLE_TIME / 2:
@@ -110,12 +116,12 @@ def run_viewer(pull_rate):
                 data.xfrc_applied[magnet_id, :3] += fvec_total * scale
 
                 for f, nd, sp in fvec_list:
-                    arrow_len = max(0.002, 0.001 * f * scale)
+                    arrow_len = max(0.002, MAG_ARROW_SCALE * f * scale)
                     add_arrow(v.user_scn, sp, sp + arrow_len * nd, (0.1, 0.4, 0.9, 0.9))
 
             f_mag_z = (fvec_total * scale)[2] if (fvec_total.any() and data.time >= SETTLE_TIME / 2) else 0.0
 
-            # Pull force ramp — red arrow upward from COM
+            # ── Pull force ramp — red arrow upward from COM ───────────────────
             f_pull = 0.0
             if data.time >= SETTLE_TIME:
                 if not ramp_started:
@@ -128,7 +134,7 @@ def run_viewer(pull_rate):
                 data.xfrc_applied[magnet_id, 2] += f_pull   # upward at COM
 
                 com_pos   = data.xpos[magnet_id].copy()
-                arrow_len = max(0.005, 0.005 * f_pull / 10.0)
+                arrow_len = max(0.005, FORCE_ARROW_SCALE * f_pull / 10.0)
                 add_arrow(v.user_scn, com_pos, com_pos + np.array([0, 0, arrow_len]), (0.9, 0.1, 0.1, 0.9))
 
                 if not separated:
@@ -136,7 +142,7 @@ def run_viewer(pull_rate):
 
             mujoco.mj_step(model, data)
 
-            # Detachment check: COM Z displacement sustained above DETACH_DIST
+            # ── Detachment check ──────────────────────────────────────────────
             z_disp_mm = (data.xpos[magnet_id][2] - z0) * 1000   # mm
             if ramp_started and not separated:
                 if z_disp_mm > DETACH_DIST:
@@ -148,11 +154,16 @@ def run_viewer(pull_rate):
                 else:
                     lift_start = None
 
-            # Telemetry every 0.1s
-            if data.time - last_print >= 0.1:
+            # ── Telemetry ─────────────────────────────────────────────────────
+            if data.time - last_print >= TELEMETRY_INTERVAL:
                 last_print = data.time
                 phase = "SEPARATED" if separated else ("RAMP" if ramp_started else "SETTLE")
-                print(f"t={data.time:.2f}s [{phase}] F_pull={f_pull:.1f} N  F_mag={-f_mag_z:.1f} N  z_disp={z_disp_mm:.2f} mm")
+                print(
+                    f"t={data.time:.2f}s [{phase}] "
+                    f"F_pull={f_pull:.1f} N  "
+                    f"F_mag={-f_mag_z:.1f} N  "
+                    f"z_disp={z_disp_mm:.2f} mm"
+                )
 
             v.sync()
             elapsed = time.perf_counter() - step_start
