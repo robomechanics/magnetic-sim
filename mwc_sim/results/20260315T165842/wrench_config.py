@@ -29,8 +29,8 @@ DETACH_HOLD   = 0.5      # s  — f_mag must stay < DETACH_THRESHOLD for this lo
 DETACH_THRESHOLD = 0.01  # N  — magnetic force below this counts as detached
 
 # ── Wrench application toggles ───────────────────────────────────────────────
-APPLY_FORCE  = False  # apply horizontal force at stick tip
-APPLY_MOMENT = True   # apply resulting torque at magnet COM
+APPLY_FORCE  = True  # apply horizontal force at stick tip
+APPLY_MOMENT = False   # apply resulting torque at magnet COM
 
 # ── Viewer ────────────────────────────────────────────────────────────────────
 REAL_TIME_FACTOR    = 0.8    # <1 = slow-mo, 1 = real time
