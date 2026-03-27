@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(///wsl.localhost/Ubuntu-22.04/mnt/**)",
+      "Read(///wsl.localhost/Ubuntu-22.04//**)",
+      "Bash(wslpath -u \"\\\\\\\\wsl.localhost\\\\Ubuntu-22.04\\\\home\\\\ns_wsl\\\\magnetic_sim\\\\legged_sim\\\\mwc_mjcf\")",
+      "Bash(python3.11 -c \"print\\(''test''\\)\")",
+      "Bash(python3.10 -c \"print\\(''test''\\)\")"
+    ]
+  }
+}
