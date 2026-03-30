@@ -33,10 +33,18 @@ def setup_model(params):
     data  = mujoco.MjData(model)
     model.opt.timestep = TIMESTEP
 
-    # mujoco.mj_resetDataKeyframe(model, data, model.keyframe("spider_rest").id)
     mujoco.mj_resetData(model, data)
     print(f"Keyframe ctrl: {data.ctrl}")
-    
+
+    # ── Set initial joint angles from config ──────────────────────────────────
+    from config import KNEE_BAKE_DEG
+    for leg in ('FL', 'FR', 'BL', 'BR'):
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"knee_{leg}")
+        if jid != -1:
+            data.qpos[model.jnt_qposadr[jid]] = np.radians(KNEE_BAKE_DEG[leg])
+    mujoco.mj_forward(model, data)
+    # ─────────────────────────────────────────────────────────────────────────
+
     plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, PLATE_GEOM_NAME)
     if plate_id == -1: raise ValueError(f"'{PLATE_GEOM_NAME}' geom not found")
 

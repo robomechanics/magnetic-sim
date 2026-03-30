@@ -14,6 +14,7 @@ MAGNET_VOLUME = np.pi * (0.0315 ** 2) * 0.025   # r=31.5mm, h=25mm
 # ── Scene / XML ───────────────────────────────────────────────────────────────
 SCENE_XML         = "mwc_mjcf/scene.xml"
 ROBOT_XML         = "mwc_mjcf/robot.xml"
+ROBOT_ORIGINAL_XML = "mwc_mjcf/robot_original.xml"
 MAGNET_BODY_NAMES = ["electromagnet_BL", "electromagnet_FL", "electromagnet_BR", "electromagnet_FR"]
 PLATE_GEOM_NAME   = "wall"
 
@@ -65,10 +66,10 @@ KNEE_AXIS = {
 # Angle (degrees) to bake into each leg's knee geom endpoint.
 # Positive = flex toward body, negative = extend outward.
 KNEE_BAKE_DEG = {
-    'FL': -75.0,
-    'FR': -75.0,
-    'BL': -75.0,
-    'BR': -75.0,
+    'FL': -0.0,
+    'FR': -0.0,
+    'BL': -0.0,
+    'BR': -0.0,
 }
 
 
@@ -97,7 +98,9 @@ def bake_joint_angles(xml_path=None):
     if xml_path is None:
         xml_path = ROBOT_XML
 
-    with open(xml_path, 'r') as f:
+    original_path = xml_path.replace("robot.xml", "robot_original.xml")
+
+    with open(original_path, 'r') as f:   # always read from clean copy
         xml = f.read()
 
     for leg in ('FL', 'FR', 'BL', 'BR'):
@@ -125,8 +128,8 @@ def bake_joint_angles(xml_path=None):
         )
 
         print(f"[bake] {leg} knee: {old_str}  →  {new_str}")
-
-    with open(xml_path, 'w') as f:
+    
+    with open(xml_path, 'w') as f:        # write to working robot.xml
         f.write(xml)
 
     print(f"[bake] Written to {xml_path}")

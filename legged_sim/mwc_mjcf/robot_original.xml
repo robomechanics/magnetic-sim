@@ -1,0 +1,291 @@
+<!-- Robot fragment — included by scene.xml -->
+<!-- All positions in metres (derived from mm specs); angles in degrees.      -->
+<!--                                                                          -->
+<!-- CONNECTION METHOD: body-origin-at-joint + fromto geoms                  -->
+<!--   Each body origin  = joint pivot point                                  -->
+<!--   Cylinder fromto="0 0 0  dx dy dz" spans joint → next joint in body    -->
+<!--   local frame.  Child body pos="dx dy dz" = that same endpoint.         -->
+<!--                                                                          -->
+<!-- COORDINATE CONVENTION: +X = FRONT of robot (orange indicator on +X side -->
+<!--   confirms front).  +Y = left.  Corner layout:                           -->
+<!--     FL (+X, +Y)  |  FR (+X, -Y)                                         -->
+<!--     BL (-X, +Y)  |  BR (-X, -Y)                                         -->
+<!--                                                                          -->
+<!-- JOINT AXES:                                                               -->
+<!--   hip_pitch (all legs): hinge about Z axis (0 0 1), range -90..+90 deg  -->
+<!--     → yaw-like swing of leg in the horizontal plane                      -->
+<!--   knee / wrist: hinge about leg-diagonal axis in XY plane                -->
+<!--   ee: hinge about leg-diagonal axis in YZ plane                          -->
+<!--                                                                          -->
+<!-- LEG COLORS (structural cylinder geoms):                                  -->
+<!--   FL = RED   (1.0 0.1 0.1 1)                                             -->
+<!--   FR = GREEN (0.1 0.8 0.1 1)                                             -->
+<!--   BL = BLUE  (0.1 0.3 1.0 1)                                             -->
+<!--   BR = BLACK (0.1 0.1 0.1 1)                                             -->
+<mujoco>
+
+  <!-- ─── Defaults ─────────────────────────────────────────────────────────── -->
+  <default>
+    <!-- CF links: carbon fibre density ~1500 kg/m^3 -->
+    <default class="cf_link">
+      <geom type="cylinder"
+            condim="3" friction="1.0 0.005 0.0001"
+            solimp="0.9 0.95 0.001" solref="0.02 1"
+            contype="1" conaffinity="1"
+            density="1500"
+            rgba="0.12 0.12 0.14 1"/>
+    </default>
+    <default class="visual">
+      <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="0.2 0.4 0.9 0.4"/>
+    </default>
+    <default class="collision">
+      <geom group="3" rgba="0 0 0 0" condim="6" contype="1" conaffinity="1"/>
+    </default>
+    <!-- damping 1 Nm.s/rad, armature 0.01 kg.m^2 -->
+    <joint damping="1.0" armature="0.01"/>
+
+    <!-- position-servo default gain -->
+    <position kp="100" kv="10"/>
+    <!-- <position /> -->
+  </default>
+
+  <!-- ─── Assets ───────────────────────────────────────────────────────────── -->
+  <asset>
+    <mesh file="1103___pp___aws_pem_215lbs__eml63mm_24.stl"/>
+  </asset>
+
+  <!-- ─── Robot Body ───────────────────────────────────────────────────────── -->
+  <worldbody>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         MAIN FRAME  260L x 260W x 46H mm  |  CF, density=1500 kg/m^3
+         Spawned 450 mm above floor.
+         Leg corner mount points (TOP face of frame):
+           X = +/-(130 - 33.5) = +/-96.5 mm  ->  +/-0.0965 m
+           Y = +/-(130 - 38.0) = +/-92.0 mm  ->  +/-0.0920 m
+           Z = +23 mm (top face)              ->  +0.023 m
+    ═══════════════════════════════════════════════════════════════════════ -->
+    <body name="main_frame" pos="0 0 0.45">
+      <freejoint name="root"/>
+      <geom name="frame_geom" type="box"
+            size="0.130 0.130 0.023"
+            density="7800"
+            contype="0" conaffinity="0"
+            rgba="0.25 0.45 0.75 1"/>
+      <!-- Front indicator: small orange block on +X face (front), top surface -->
+      <geom name="front_indicator" type="box"
+            size="0.025 0.008 0.010"
+            pos="0.138 0 0.033"
+            contype="0" conaffinity="0"
+            rgba="1.0 0.45 0.0 1"/>
+
+      <!-- ════════════════════════ BACK-LEFT (BLUE) ══════════════════ -->
+      <body name="hip_link_BL" pos="-0.0965 0.092 0.023">
+        <joint name="hip_pitch_BL" type="hinge" axis="0 0 1" range="-90 90"/>
+        <geom name="hip_geom_BL" type="cylinder"
+              fromto="0 0 0  -0.03350 0.03350 0.060"
+              size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
+
+        <body name="knee_link_BL" pos="-0.03350 0.03350 0.060">
+          <joint name="knee_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-45 45"/>
+          <geom name="knee_geom_BL" type="cylinder"
+                fromto="0 0 0  -0.07280 0.07280 -0.04432"
+                size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
+
+          <body name="wrist_link_BL" pos="-0.07280 0.07280 -0.04432">
+            <joint name="wrist_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-67.5 67.5"/>
+            <geom name="wrist_geom_BL" type="cylinder"
+                  fromto="0 0 0  0 0 0.210"
+                  size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
+
+            <body name="EE_BL" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+              <joint name="ee_BL" type="hinge" axis="0 0.7071068 0.7071068" range="-45 45"/>
+              <geom name="ee_link_geom_BL" type="cylinder"
+                    fromto="0 0 0  -0.066 0 0"
+                    size="0.0115" class="cf_link" rgba="0.1 0.3 1.0 1"/>
+              <body name="electromagnet_BL" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+                <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 -0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+              </body>
+            </body><!-- EE_BL -->
+          </body><!-- wrist_link_BL -->
+        </body><!-- knee_link_BL -->
+      </body><!-- hip_link_BL -->
+
+      <!-- ════════════════════════ FRONT-LEFT (RED) ══════════════════ -->
+      <body name="hip_link_FL" pos="0.0965 0.092 0.023">
+        <joint name="hip_pitch_FL" type="hinge" axis="0 0 1" range="-90 90"/>
+        <geom name="hip_geom_FL" type="cylinder"
+              fromto="0 0 0  0.03350 0.03350 0.060"
+              size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
+
+        <body name="knee_link_FL" pos="0.03350 0.03350 0.060">
+          <joint name="knee_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-45 45"/>
+          <geom name="knee_geom_FL" type="cylinder"
+                fromto="0 0 0  0.07280 0.07280 -0.04432"
+                size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
+
+          <body name="wrist_link_FL" pos="0.07280 0.07280 -0.04432">
+            <joint name="wrist_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-67.5 67.5"/>
+            <geom name="wrist_geom_FL" type="cylinder"
+                  fromto="0 0 0  0 0 0.210"
+                  size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
+
+            <body name="EE_FL" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+              <joint name="ee_FL" type="hinge" axis="0 -0.7071068 0.7071068" range="-45 45"/>
+              <geom name="ee_link_geom_FL" type="cylinder"
+                    fromto="0 0 0  -0.066 0 0"
+                    size="0.0115" class="cf_link" rgba="1.0 0.1 0.1 1"/>
+              <body name="electromagnet_FL" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+                <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 -0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+              </body>
+            </body><!-- EE_FL -->
+          </body><!-- wrist_link_FL -->
+        </body><!-- knee_link_FL -->
+      </body><!-- hip_link_FL -->
+
+      <!-- ════════════════════════ BACK-RIGHT (BLACK) ════════════════ -->
+      <body name="hip_link_BR" pos="-0.0965 -0.092 0.023">
+        <joint name="hip_pitch_BR" type="hinge" axis="0 0 1" range="-90 90"/>
+        <geom name="hip_geom_BR" type="cylinder"
+              fromto="0 0 0  -0.03350 -0.03350 0.060"
+              size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
+
+        <body name="knee_link_BR" pos="-0.03350 -0.03350 0.060">
+          <joint name="knee_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-45 45"/>
+          <geom name="knee_geom_BR" type="cylinder"
+                fromto="0 0 0  -0.07280 -0.07280 -0.04432"
+                size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
+
+          <body name="wrist_link_BR" pos="-0.07280 -0.07280 -0.04432">
+            <joint name="wrist_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-67.5 67.5"/>
+            <geom name="wrist_geom_BR" type="cylinder"
+                  fromto="0 0 0  0 0 0.210"
+                  size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
+
+            <body name="EE_BR" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+              <joint name="ee_BR" type="hinge" axis="0 0.7071068 -0.7071068" range="-45 45"/>
+              <geom name="ee_link_geom_BR" type="cylinder"
+                    fromto="0 0 0  -0.066 0 0"
+                    size="0.0115" class="cf_link" rgba="0.1 0.1 0.1 1"/>
+              <body name="electromagnet_BR" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+                <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 -0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+              </body>
+            </body><!-- EE_BR -->
+          </body><!-- wrist_link_BR -->
+        </body><!-- knee_link_BR -->
+      </body><!-- hip_link_BR -->
+
+      <!-- ════════════════════════ FRONT-RIGHT (GREEN) ═══════════════ -->
+      <body name="hip_link_FR" pos="0.0965 -0.092 0.023">
+        <joint name="hip_pitch_FR" type="hinge" axis="0 0 1" range="-90 90"/>
+        <geom name="hip_geom_FR" type="cylinder"
+              fromto="0 0 0  0.03350 -0.03350 0.060"
+              size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
+
+        <body name="knee_link_FR" pos="0.03350 -0.03350 0.060">
+          <joint name="knee_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-45 45"/>
+          <geom name="knee_geom_FR" type="cylinder"
+                fromto="0 0 0  0.07280 -0.07280 -0.04432"
+                size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
+
+          <body name="wrist_link_FR" pos="0.07280 -0.07280 -0.04432">
+            <joint name="wrist_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-67.5 67.5"/>
+            <geom name="wrist_geom_FR" type="cylinder"
+                  fromto="0 0 0  0 0 0.210"
+                  size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
+
+            <body name="EE_FR" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+              <joint name="ee_FR" type="hinge" axis="0 -0.7071068 -0.7071068" range="-45 45"/>
+              <geom name="ee_link_geom_FR" type="cylinder"
+                    fromto="0 0 0  -0.066 0 0"
+                    size="0.0115" class="cf_link" rgba="0.1 0.8 0.1 1"/>
+              <body name="electromagnet_FR" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+                <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="-0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 -0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+                <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 -0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
+              </body>
+            </body><!-- EE_FR -->
+          </body><!-- wrist_link_FR -->
+        </body><!-- knee_link_FR -->
+      </body><!-- hip_link_FR -->
+
+    </body><!-- main_frame -->
+  </worldbody>
+
+  <!-- ─── Actuators ─────────────────────────────────────────────────────────── -->
+  <actuator>
+    <!-- Back-Left -->
+    <position name="hip_pitch_act_BL" joint="hip_pitch_BL"  ctrlrange="-90 90"/>
+    <position name="knee_act_BL"      joint="knee_BL"       ctrlrange="-45 45"/>
+    <position name="wrist_act_BL"     joint="wrist_BL"      ctrlrange="-67.5 67.5"/>
+    <!-- Front-Left -->
+    <position name="hip_pitch_act_FL" joint="hip_pitch_FL"  ctrlrange="-90 90"/>
+    <position name="knee_act_FL"      joint="knee_FL"       ctrlrange="-45 45"/>
+    <position name="wrist_act_FL"     joint="wrist_FL"      ctrlrange="-67.5 67.5"/>
+    <!-- Back-Right -->
+    <position name="hip_pitch_act_BR" joint="hip_pitch_BR"  ctrlrange="-90 90"/>
+    <position name="knee_act_BR"      joint="knee_BR"       ctrlrange="-45 45"/>
+    <position name="wrist_act_BR"     joint="wrist_BR"      ctrlrange="-67.5 67.5"/>
+    <!-- Front-Right -->
+    <position name="hip_pitch_act_FR" joint="hip_pitch_FR"  ctrlrange="-90 90"/>
+    <position name="knee_act_FR"      joint="knee_FR"       ctrlrange="-45 45"/>
+    <position name="wrist_act_FR"     joint="wrist_FR"      ctrlrange="-67.5 67.5"/>
+    <!-- EE joints -->
+    <position name="ee_act_BL"        joint="ee_BL"         ctrlrange="-45 45"/>
+    <position name="ee_act_FL"        joint="ee_FL"         ctrlrange="-45 45"/>
+    <position name="ee_act_BR"        joint="ee_BR"         ctrlrange="-45 45"/>
+    <position name="ee_act_FR"        joint="ee_FR"         ctrlrange="-45 45"/>
+  </actuator>
+
+  <!-- ─── Keyframe: spider resting pose ───────────────────────────────────── -->
+  <!-- freejoint (7): x y z qw qx qy qz                                        -->
+  <!-- per leg (4): hip_pitch  knee  wrist  ee   (deg, compiler=degree)        -->
+  <keyframe>
+    <key name="spider_rest"
+        qpos="0 0 0.45 1 0 0 0
+              0 30 30 0
+              0 30 30 0
+              0 30 30 0
+              0 30 30 0"
+        ctrl="0 0 0
+              0 0 0
+              0 0 0
+              0 0 0
+              0 0 0 0"/>
+  </keyframe>
+
+</mujoco>
