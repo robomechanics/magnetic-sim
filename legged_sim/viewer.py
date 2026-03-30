@@ -73,6 +73,8 @@ def run_viewer():
         v.cam.azimuth   = 45
         v.cam.elevation = -20
         v.cam.lookat[:] = [0.0, 0.0, 0.45]
+        v.opt.frame = mujoco.mjtFrame.mjFRAME_WORLD
+        v.opt.flags[mujoco.mjtVisFlag.mjVIS_JOINT] = True
 
         while v.is_running() and data.time < SIM_DURATION:
             if key_state["paused"] and not key_state["step_once"]:
@@ -118,9 +120,28 @@ def run_viewer():
             if data.time - last_print >= TELEMETRY_INTERVAL:
                 last_print = data.time
                 phase = "SETTLE" if data.time < SETTLE_TIME else "HOLD"
+                
+                # Joint names and positions
+                joint_names = [
+                    "hip_pitch_BL", "knee_BL", "wrist_BL", "ee_BL",
+                    "hip_pitch_FL", "knee_FL", "wrist_FL", "ee_FL",
+                    "hip_pitch_BR", "knee_BR", "wrist_BR", "ee_BR",
+                    "hip_pitch_FR", "knee_FR", "wrist_FR", "ee_FR",
+                ]
+                joint_str_parts = []
+                for name in joint_names:
+                    jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+                    if jid == -1:
+                        joint_str_parts.append(f"{name}=?")
+                        continue
+                    q = data.qpos[model.jnt_qposadr[jid]]
+                    joint_str_parts.append(f"{name}={q:+.1f}°")
+                joint_str = "  ".join(joint_str_parts)
+                
                 print(
                     f"t={data.time:.2f}s [{phase}]  "
-                    f"F_mag_total={-total_fz:.1f} N"
+                    f"F_mag={-total_fz:.1f}N\n"
+                    f"  {joint_str}"
                 )
 
             v.sync()

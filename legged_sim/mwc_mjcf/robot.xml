@@ -42,11 +42,11 @@
       <geom group="3" rgba="0 0 0 0" condim="6" contype="1" conaffinity="1"/>
     </default>
     <!-- damping 1 Nm.s/rad, armature 0.01 kg.m^2 -->
-    <!-- <joint damping="1.0" armature="0.01"/> -->
+    <joint damping="1.0" armature="0.01"/>
 
     <!-- position-servo default gain -->
-    <!-- <position kp="100" kv="10"/> -->
-    <position />
+    <position kp="100" kv="10"/>
+    <!-- <position /> -->
   </default>
 
   <!-- ─── Assets ───────────────────────────────────────────────────────────── -->
@@ -69,7 +69,9 @@
       <freejoint name="root"/>
       <geom name="frame_geom" type="box"
             size="0.130 0.130 0.023"
-            class="cf_link" rgba="0.25 0.45 0.75 1"/>
+            density="7800"
+            contype="0" conaffinity="0"
+            rgba="0.25 0.45 0.75 1"/>
       <!-- Front indicator: small orange block on +X face (front), top surface -->
       <geom name="front_indicator" type="box"
             size="0.025 0.008 0.010"
@@ -87,10 +89,10 @@
         <body name="knee_link_BL" pos="-0.03350 0.03350 0.060">
           <joint name="knee_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-45 45"/>
           <geom name="knee_geom_BL" type="cylinder"
-                fromto="0 0 0  -0.04911 0.04911 0.08797"
+                fromto="0 0 0  -0.07280 0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
 
-          <body name="wrist_link_BL" pos="-0.04911 0.04911 0.08797">
+          <body name="wrist_link_BL" pos="-0.07280 0.07280 -0.04432">
             <joint name="wrist_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_BL" type="cylinder"
                   fromto="0 0 0  0 0 0.210"
@@ -128,10 +130,10 @@
         <body name="knee_link_FL" pos="0.03350 0.03350 0.060">
           <joint name="knee_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-45 45"/>
           <geom name="knee_geom_FL" type="cylinder"
-                fromto="0 0 0  0.04911 0.04911 0.08797"
+                fromto="0 0 0  0.07280 0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
 
-          <body name="wrist_link_FL" pos="0.04911 0.04911 0.08797">
+          <body name="wrist_link_FL" pos="0.07280 0.07280 -0.04432">
             <joint name="wrist_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_FL" type="cylinder"
                   fromto="0 0 0  0 0 0.210"
@@ -169,10 +171,10 @@
         <body name="knee_link_BR" pos="-0.03350 -0.03350 0.060">
           <joint name="knee_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-45 45"/>
           <geom name="knee_geom_BR" type="cylinder"
-                fromto="0 0 0  -0.04911 -0.04911 0.08797"
+                fromto="0 0 0  -0.07280 -0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
 
-          <body name="wrist_link_BR" pos="-0.04911 -0.04911 0.08797">
+          <body name="wrist_link_BR" pos="-0.07280 -0.07280 -0.04432">
             <joint name="wrist_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_BR" type="cylinder"
                   fromto="0 0 0  0 0 0.210"
@@ -210,10 +212,10 @@
         <body name="knee_link_FR" pos="0.03350 -0.03350 0.060">
           <joint name="knee_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-45 45"/>
           <geom name="knee_geom_FR" type="cylinder"
-                fromto="0 0 0  0.04911 -0.04911 0.08797"
+                fromto="0 0 0  0.07280 -0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
 
-          <body name="wrist_link_FR" pos="0.04911 -0.04911 0.08797">
+          <body name="wrist_link_FR" pos="0.07280 -0.07280 -0.04432">
             <joint name="wrist_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_FR" type="cylinder"
                   fromto="0 0 0  0 0 0.210"
@@ -279,10 +281,10 @@
               0 30 30 0
               0 30 30 0
               0 30 30 0"
-        ctrl="0 30 30
-              0 30 30
-              0 30 30
-              0 30 30
+        ctrl="0 0 0
+              0 0 0
+              0 0 0
+              0 0 0
               0 0 0 0"/>
   </keyframe>
 

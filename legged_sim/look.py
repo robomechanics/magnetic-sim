@@ -7,7 +7,8 @@ SCENE_XML = os.path.join(os.path.dirname(__file__), "mwc_mjcf", "scene.xml")
 def main():
     model = mujoco.MjModel.from_xml_path(SCENE_XML)
     data  = mujoco.MjData(model)
-    mujoco.mj_resetDataKeyframe(model, data, model.keyframe("spider_rest").id)
+    # mujoco.mj_resetDataKeyframe(model, data, model.keyframe("spider_rest").id)
+    mujoco.mj_resetData(model, data)
 
     print(f"Loaded: {SCENE_XML}")
     print(f"  Bodies   : {model.nbody}")

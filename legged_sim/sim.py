@@ -17,6 +17,7 @@ from config import (
     SCENE_XML, MAGNET_BODY_NAMES, PLATE_GEOM_NAME,
     TIMESTEP, SETTLE_TIME, SIM_DURATION,
     PARAMS, MAG_ENABLED,
+    bake_joint_angles,
 )
 
 
@@ -27,11 +28,14 @@ def mag_force(dist, Br):
 
 
 def setup_model(params):
+    bake_joint_angles()   # recompute + overwrite knee geometry in robot.xml
     model = mujoco.MjModel.from_xml_path(SCENE_XML)
     data  = mujoco.MjData(model)
     model.opt.timestep = TIMESTEP
 
-    mujoco.mj_resetDataKeyframe(model, data, model.keyframe("spider_rest").id)
+    # mujoco.mj_resetDataKeyframe(model, data, model.keyframe("spider_rest").id)
+    mujoco.mj_resetData(model, data)
+    print(f"Keyframe ctrl: {data.ctrl}")
     
     plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, PLATE_GEOM_NAME)
     if plate_id == -1: raise ValueError(f"'{PLATE_GEOM_NAME}' geom not found")
@@ -114,6 +118,8 @@ def run_headless(params=None):
         data.xfrc_applied[:] = 0.0
         f_mag_z = apply_mag(model, data, sphere_gids, plate_id, magnet_ids, fromto, params) if MAG_ENABLED else 0.0
         records.append({'t': data.time, 'f_mag': -f_mag_z})
+        if len(records) % 1000 == 0:
+            print(f"t={data.time:.2f}s  ctrl={data.ctrl}")
         mujoco.mj_step(model, data)
 
     print(f"Done. Mean magnetic force: {np.mean([r['f_mag'] for r in records]):.2f} N")
