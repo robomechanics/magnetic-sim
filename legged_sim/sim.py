@@ -28,20 +28,28 @@ def mag_force(dist, Br):
 
 
 def setup_model(params):
-    bake_joint_angles()   # recompute + overwrite knee geometry in robot.xml
+    bake_joint_angles()   # recompute + overwrite knee/wrist/EE geometry in robot.xml
     model = mujoco.MjModel.from_xml_path(SCENE_XML)
     data  = mujoco.MjData(model)
     model.opt.timestep = TIMESTEP
 
     mujoco.mj_resetData(model, data)
-    print(f"Keyframe ctrl: {data.ctrl}")
 
     # ── Set initial joint angles from config ──────────────────────────────────
-    from config import KNEE_BAKE_DEG
+    from config import KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG
     for leg in ('FL', 'FR', 'BL', 'BR'):
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"knee_{leg}")
         if jid != -1:
             data.qpos[model.jnt_qposadr[jid]] = np.radians(KNEE_BAKE_DEG[leg])
+
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"wrist_{leg}")
+        if jid != -1:
+            data.qpos[model.jnt_qposadr[jid]] = np.radians(WRIST_BAKE_DEG[leg])
+
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"ee_{leg}")
+        if jid != -1:
+            data.qpos[model.jnt_qposadr[jid]] = np.radians(EE_BAKE_DEG[leg])
+
     mujoco.mj_forward(model, data)
     # ─────────────────────────────────────────────────────────────────────────
 

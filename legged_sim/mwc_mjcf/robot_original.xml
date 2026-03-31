@@ -95,15 +95,15 @@
           <body name="wrist_link_BL" pos="-0.07280 0.07280 -0.04432">
             <joint name="wrist_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_BL" type="cylinder"
-                  fromto="0 0 0  0 0 0.210"
+                  fromto="0 0 0  -0.07425 0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
 
-            <body name="EE_BL" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+            <body name="EE_BL" pos="-0.07425 0.07425 -0.18187" quat="0.7071 0 0.7071 0">
               <joint name="ee_BL" type="hinge" axis="0 0.7071068 0.7071068" range="-45 45"/>
               <geom name="ee_link_geom_BL" type="cylinder"
-                    fromto="0 0 0  -0.066 0 0"
+                    fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="0.1 0.3 1.0 1"/>
-              <body name="electromagnet_BL" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+              <body name="electromagnet_BL" pos="0.066075 0.000000 0.000000" quat="-0.5 0.5 0.5 0.5">
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
                 <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -136,15 +136,15 @@
           <body name="wrist_link_FL" pos="0.07280 0.07280 -0.04432">
             <joint name="wrist_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_FL" type="cylinder"
-                  fromto="0 0 0  0 0 0.210"
+                  fromto="0 0 0  0.07425 0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
 
-            <body name="EE_FL" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+            <body name="EE_FL" pos="0.07425 0.07425 -0.18187" quat="0.7071 0 0.7071 0">
               <joint name="ee_FL" type="hinge" axis="0 -0.7071068 0.7071068" range="-45 45"/>
               <geom name="ee_link_geom_FL" type="cylinder"
-                    fromto="0 0 0  -0.066 0 0"
+                    fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="1.0 0.1 0.1 1"/>
-              <body name="electromagnet_FL" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+              <body name="electromagnet_FL" pos="0.066075 0.000000 0.000000" quat="0.5 0.5 0.5 -0.5">
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
                 <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -177,15 +177,15 @@
           <body name="wrist_link_BR" pos="-0.07280 -0.07280 -0.04432">
             <joint name="wrist_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_BR" type="cylinder"
-                  fromto="0 0 0  0 0 0.210"
+                  fromto="0 0 0  -0.07425 -0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
 
-            <body name="EE_BR" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+            <body name="EE_BR" pos="-0.07425 -0.07425 -0.18187" quat="0.7071 0 0.7071 0">
               <joint name="ee_BR" type="hinge" axis="0 0.7071068 -0.7071068" range="-45 45"/>
               <geom name="ee_link_geom_BR" type="cylinder"
-                    fromto="0 0 0  -0.066 0 0"
+                    fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="0.1 0.1 0.1 1"/>
-              <body name="electromagnet_BR" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+              <body name="electromagnet_BR" pos="0.066075 0.000000 0.000000" quat="0.5 0.5 0.5 -0.5">
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
                 <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -218,15 +218,15 @@
           <body name="wrist_link_FR" pos="0.07280 -0.07280 -0.04432">
             <joint name="wrist_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-67.5 67.5"/>
             <geom name="wrist_geom_FR" type="cylinder"
-                  fromto="0 0 0  0 0 0.210"
+                  fromto="0 0 0  0.07425 -0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
 
-            <body name="EE_FR" pos="0 0 0.210" quat="0.7071 0 0.7071 0">
+            <body name="EE_FR" pos="0.07425 -0.07425 -0.18187" quat="0.7071 0 0.7071 0">
               <joint name="ee_FR" type="hinge" axis="0 -0.7071068 -0.7071068" range="-45 45"/>
               <geom name="ee_link_geom_FR" type="cylinder"
-                    fromto="0 0 0  -0.066 0 0"
+                    fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="0.1 0.8 0.1 1"/>
-              <body name="electromagnet_FR" pos="-0.066075 0 0" quat="0.7071068 0 0 0.7071068">
+              <body name="electromagnet_FR" pos="0.066075 0.000000 0.000000" quat="-0.5 0.5 0.5 0.5">
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
                 <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -270,22 +270,5 @@
     <position name="ee_act_BR"        joint="ee_BR"         ctrlrange="-45 45"/>
     <position name="ee_act_FR"        joint="ee_FR"         ctrlrange="-45 45"/>
   </actuator>
-
-  <!-- ─── Keyframe: spider resting pose ───────────────────────────────────── -->
-  <!-- freejoint (7): x y z qw qx qy qz                                        -->
-  <!-- per leg (4): hip_pitch  knee  wrist  ee   (deg, compiler=degree)        -->
-  <keyframe>
-    <key name="spider_rest"
-        qpos="0 0 0.45 1 0 0 0
-              0 30 30 0
-              0 30 30 0
-              0 30 30 0
-              0 30 30 0"
-        ctrl="0 0 0
-              0 0 0
-              0 0 0
-              0 0 0
-              0 0 0 0"/>
-  </keyframe>
 
 </mujoco>
