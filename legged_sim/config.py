@@ -42,6 +42,42 @@ PARAMS = {
     'max_force_per_wheel':   917.216,
 }
 
+# ── Servo and joint dynamics ─────────────────────────────────────────────────
+# Applied at model load time in setup_model(), overriding XML defaults.
+#
+#   joint_damping  : resistive torque (Nm·s/rad). Raise to kill link wiggle.
+#                    XML default = 1.0. Try 5.0–15.0 for stance stability.
+#   joint_armature : rotor inertia (kg·m²). Improves numerical stability.
+#                    XML default = 0.01. Keep 0.01–0.1.
+#   kp             : position servo proportional gain (N/m or Nm/rad).
+#                    XML default = 100. Raise with damping to keep responsiveness.
+#   kv             : position servo derivative gain. XML default = 10.
+#                    Critical damping ≈ 2*sqrt(kp * armature). At kp=200,
+#                    armature=0.05 → critical kv ≈ 6.3; kv=10 is lightly overdamped.
+#
+JOINT_DAMPING  = 5.0    # Nm·s/rad
+JOINT_ARMATURE = 0.05   # kg·m²
+SERVO_KP       = 200.0  # Nm/rad
+SERVO_KV       = 10.0   # Nm·s/rad
+
+# ── Gait timing ───────────────────────────────────────────────────────────────
+# All times in seconds. Passed into TrajectoryPlanner at construction.
+#
+#   SWING_DURATION    : time from liftoff to touchdown (quintic spline duration).
+#                       Shorter = faster steps, higher servo demand.
+#   SWING_LIFT_HEIGHT : peak height above surface at mid-swing (metres).
+#   STEP_LENGTH       : nominal forward distance per step along surface (metres).
+#   DEMAGNETIZE_HOLD  : min time to wait after commanding magnet off before
+#                       checking for contact loss. Keep ≥ 2–3 × TIMESTEP.
+#   MAGNETIZE_HOLD    : min time to wait after touchdown before transferring
+#                       weight. Allows magnet flux to build.
+#
+SWING_DURATION    = 3    # s
+SWING_LIFT_HEIGHT = 0.1   # m
+STEP_LENGTH       = 0.3   # m
+DEMAGNETIZE_HOLD  = 0.10   # s
+MAGNETIZE_HOLD    = 0.15   # s
+
 # ── Joint geometry baking ─────────────────────────────────────────────────────
 #
 # Zero-pose endpoint vectors read directly from robot_original.xml (knee geom fromto,

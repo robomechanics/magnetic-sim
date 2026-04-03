@@ -65,7 +65,7 @@
            Y = +/-(130 - 38.0) = +/-92.0 mm  ->  +/-0.0920 m
            Z = +23 mm (top face)              ->  +0.023 m
     ═══════════════════════════════════════════════════════════════════════ -->
-    <body name="main_frame" pos="0 0 0.45">
+    <body name="main_frame" pos="-2.0 0 0.45">
       <freejoint name="root"/>
       <geom name="frame_geom" type="box"
             size="0.130 0.130 0.023"
@@ -249,19 +249,19 @@
   <!-- ─── Actuators ─────────────────────────────────────────────────────────── -->
   <actuator>
     <!-- Back-Left -->
-    <position name="hip_pitch_act_BL" joint="hip_pitch_BL"  ctrlrange="-90 90"/>
+    <position name="hip_pitch_act_BL" joint="hip_pitch_BL"  ctrlrange="-45 45"/>
     <position name="knee_act_BL"      joint="knee_BL"       ctrlrange="-45 45"/>
     <position name="wrist_act_BL"     joint="wrist_BL"      ctrlrange="-67.5 67.5"/>
     <!-- Front-Left -->
-    <position name="hip_pitch_act_FL" joint="hip_pitch_FL"  ctrlrange="-90 90"/>
+    <position name="hip_pitch_act_FL" joint="hip_pitch_FL"  ctrlrange="-45 45"/>
     <position name="knee_act_FL"      joint="knee_FL"       ctrlrange="-45 45"/>
     <position name="wrist_act_FL"     joint="wrist_FL"      ctrlrange="-67.5 67.5"/>
     <!-- Back-Right -->
-    <position name="hip_pitch_act_BR" joint="hip_pitch_BR"  ctrlrange="-90 90"/>
+    <position name="hip_pitch_act_BR" joint="hip_pitch_BR"  ctrlrange="-45 45"/>
     <position name="knee_act_BR"      joint="knee_BR"       ctrlrange="-45 45"/>
     <position name="wrist_act_BR"     joint="wrist_BR"      ctrlrange="-67.5 67.5"/>
     <!-- Front-Right -->
-    <position name="hip_pitch_act_FR" joint="hip_pitch_FR"  ctrlrange="-90 90"/>
+    <position name="hip_pitch_act_FR" joint="hip_pitch_FR"  ctrlrange="-45 45"/>
     <position name="knee_act_FR"      joint="knee_FR"       ctrlrange="-45 45"/>
     <position name="wrist_act_FR"     joint="wrist_FR"      ctrlrange="-67.5 67.5"/>
     <!-- EE joints -->

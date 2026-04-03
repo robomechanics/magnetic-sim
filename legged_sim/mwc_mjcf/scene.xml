@@ -20,19 +20,21 @@
     <material name="steel" rgba="0.55 0.60 0.65 1" reflectance="0.4"/>
   </asset>
 
-  <!-- Camera centred on floor-wall corner -->
-  <statistic center="0.25 0 0.4" extent="1.5"/>
+  <!-- Camera centred on midpoint of extended floor, looking toward wall corner -->
+  <statistic center="-1.0 0 0.4" extent="2.5"/>
 
   <worldbody>
     <site name="world_origin" pos="0 0 0" size="0.05" rgba="1 1 1 0"/>
 
-    <!-- Decorative background plane (no collision) -->
-    <geom name="floor_vis" type="plane" size="1.5 1.5 0.01" material="grid"
-          pos="0 0 -0.015" contype="0" conaffinity="0"/>
+    <!-- Decorative background plane (no collision) — matches extended floor -->
+    <geom name="floor_vis" type="plane" size="2.0 1.5 0.01" material="grid"
+          pos="-1.0 0 -0.015" contype="0" conaffinity="0"/>
 
-    <!-- Magnetic floor: 1000x1000x10 mm steel plate; top face at Z=0 -->
+    <!-- Magnetic floor: 3000x1000x10 mm steel plate; top face at Z=0
+         X extents: -2.5 → +0.5  (far edge flush with wall inner face at X=0.5)
+         Center shifted to X=-1.0 so size.x=1.5 spans the full 3 m -->
     <geom name="floor" type="box"
-          pos="0 0 -0.005" size="0.5 0.5 0.005"
+          pos="-1.0 0 -0.005" size="1.5 0.5 0.005"
           condim="6" friction="0.8 0.005 0.0001"
           contype="1" conaffinity="1"
           material="steel"/>
