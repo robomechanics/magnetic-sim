@@ -1,107 +1,104 @@
 """
-sim.py — Magnetic adhesion simulation with crawl gait.
+sim.py — FL lift → 45° CCW arc → arc back → lower.
 
-Phase 1 (0 → SETTLE_TIME/2):   gravity only, robot falls onto surface.
-Phase 2 (SETTLE_TIME/2 → SETTLE_TIME): magnetic force engages, robot settles.
-Phase 3 (SETTLE_TIME → SIM_DURATION): crawl gait — TrajectoryPlanner +
-                                        MinkRobot IK + per-leg magnet control.
-
-Usage:
-    python sim.py
+Phase 1 (0 → SETTLE/2):    gravity only.
+Phase 2 (SETTLE/2 → SETTLE): magnets engage.
+Phase 3 (SETTLE → done):    FL lift → ARC_OUT → ARC_BACK → LOWER → DONE.
 """
 
+import time
 import numpy as np
 import mujoco
+import mujoco.viewer
 
 from config import (
-    MU_0, MAGNET_VOLUME,
-    SCENE_XML, MAGNET_BODY_NAMES,
+    MU_0, MAGNET_VOLUME, SCENE_XML, MAGNET_BODY_NAMES,
     TIMESTEP, SETTLE_TIME, SIM_DURATION, TELEMETRY_INTERVAL,
-    PARAMS, MAG_ENABLED,
+    PARAMS, MAG_ENABLED, REAL_TIME_FACTOR,
     JOINT_DAMPING, JOINT_ARMATURE, SERVO_KP, SERVO_KV,
-    SWING_DURATION, SWING_LIFT_HEIGHT,
-    DEMAGNETIZE_HOLD, MAGNETIZE_HOLD,
+    STANCE_KP, STANCE_KV, STANCE_DAMPING,
+    KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
     bake_joint_angles,
 )
+from trajectory import SurfacePatch, GAIT_ORDER, FootTarget, HIP_OFFSET_BODY, _quintic
+from ik import MinkRobot, CTRL_JOINT_ORDER, EE_FRAME_NAME
 
-# ── Gait / IK imports ─────────────────────────────────────────────────────────
-from trajectory import TrajectoryPlanner, SurfacePatch, GAIT_ORDER
-from ik import MinkRobot, EE_FRAME_NAME  # EE_FRAME_NAME used by viewer
+TEST_FOOT  = 'FL'
+LIFT_HEIGHT = 0.2
+ARC_DEG     = 45.0
+LIFT_DUR    = 5.0
+ARC_DUR     = 10.0
 
-# Scene geometry read from scene.xml:
-#
-#   floor: box pos="0 0 -0.005" size="0.5 0.5 0.005"
-#          top face at Z = -0.005 + 0.005 = 0.0  →  normal +Z, origin (0,0,0)
-#
-#   wall:  box pos="0.505 0 0.5" size="0.005 0.5 0.5"
-#          inner face at X = 0.505 - 0.005 = 0.500
-#          normal faces toward robot (-X direction), origin (0.5, 0, 0.5)
-#
-FLOOR_SURFACE = SurfacePatch(
-    normal = np.array([ 0.0, 0.0, 1.0]),
-    origin = np.array([-1.0, 0.0, 0.0]),   # center of extended 3 m floor
-)
-WALL_SURFACE = SurfacePatch(
-    normal = np.array([-1.0, 0.0, 0.0]),
-    origin = np.array([ 0.5, 0.0, 0.5]),
-)
-SURFACES = [FLOOR_SURFACE, WALL_SURFACE]
+WEIGHT_POS_SWING_TEST  = 15.0
+WEIGHT_ORI_SWING_TEST  =  0.0
+WEIGHT_POS_STANCE_TEST = 30.0
+WEIGHT_ORI_STANCE_TEST = 15.0
 
-# Geom names on each EM body that can make contact with the magnetic surface.
-# Used by _read_contacts to look up active contact pairs.
-# If the EM body has a single capsule/box contact geom, list it here.
-# Set to None to fall back to body-level contact scanning.
-EM_CONTACT_GEOM: dict[str, str | None] = {
-    'FL': None,
-    'FR': None,
-    'BL': None,
-    'BR': None,
+FLOOR_QUAT = np.array([0.7071068, -0.7071068, 0.0, 0.0])
+
+FLOOR_SURFACE = SurfacePatch(normal=np.array([ 0.0, 0.0, 1.0]), origin=np.array([-1.0, 0.0, 0.0]))
+WALL_SURFACE  = SurfacePatch(normal=np.array([-1.0, 0.0, 0.0]), origin=np.array([ 0.5, 0.0, 0.5]))
+SURFACES      = [FLOOR_SURFACE, WALL_SURFACE]
+
+LEG_JOINTS = {
+    'FL': ['hip_pitch_FL', 'knee_FL', 'wrist_FL'],
+    'FR': ['hip_pitch_FR', 'knee_FR', 'wrist_FR'],
+    'BL': ['hip_pitch_BL', 'knee_BL', 'wrist_BL'],
+    'BR': ['hip_pitch_BR', 'knee_BR', 'wrist_BR'],
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Unchanged from original
-# ─────────────────────────────────────────────────────────────────────────────
+def set_leg_stiffness(model, foot, is_stance):
+    kp, kv, damping = (STANCE_KP, STANCE_KV, STANCE_DAMPING) if is_stance else (SERVO_KP, SERVO_KV, JOINT_DAMPING)
+    for joint_name in LEG_JOINTS[foot]:
+        jid  = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        model.dof_damping[model.jnt_dofadr[jid]] = damping
+        aid = CTRL_JOINT_ORDER.index(joint_name)
+        model.actuator_gainprm[aid, 0] =  kp
+        model.actuator_biasprm[aid, 1] = -kv
+        model.actuator_biasprm[aid, 2] = -kp
+
+
+def lock_stance_joints(data, swing_foot, stance_ctrl_targets, joint_indices):
+    DRIFT_THRESHOLD = np.radians(2.0)
+    for foot in GAIT_ORDER:
+        if foot == swing_foot:
+            continue
+        for joint_name in LEG_JOINTS[foot]:
+            qidx, aid = joint_indices[(foot, joint_name)]
+            if abs(data.qpos[qidx] - stance_ctrl_targets[(foot, joint_name)]) > DRIFT_THRESHOLD:
+                data.ctrl[aid] = stance_ctrl_targets[(foot, joint_name)]
+
 
 def mag_force(dist, Br):
-    """Dipole-dipole attractive force (N) for one sampling sphere."""
     m = (Br * MAGNET_VOLUME) / MU_0
     return (3 * MU_0 * m**2) / (2 * np.pi * (2 * dist)**4)
 
 
 def setup_model(params):
-    bake_joint_angles()   # recompute + overwrite knee/wrist/EE geometry in robot.xml
+    bake_joint_angles()
     model = mujoco.MjModel.from_xml_path(SCENE_XML)
     data  = mujoco.MjData(model)
     model.opt.timestep = TIMESTEP
-
     mujoco.mj_resetData(model, data)
 
-    # ── Set initial joint angles from config ──────────────────────────────────
-    from config import KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG
     for leg in ('FL', 'FR', 'BL', 'BR'):
-        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"knee_{leg}")
-        if jid != -1:
-            data.qpos[model.jnt_qposadr[jid]] = np.radians(KNEE_BAKE_DEG[leg])
-
-        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"wrist_{leg}")
-        if jid != -1:
-            data.qpos[model.jnt_qposadr[jid]] = np.radians(WRIST_BAKE_DEG[leg])
-
-        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"ee_{leg}")
-        if jid != -1:
-            data.qpos[model.jnt_qposadr[jid]] = np.radians(EE_BAKE_DEG[leg])
+        for jname, bake_dict in [
+            (f'knee_{leg}',  KNEE_BAKE_DEG),
+            (f'wrist_{leg}', WRIST_BAKE_DEG),
+            (f'ee_{leg}',    EE_BAKE_DEG),
+        ]:
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+            if jid != -1:
+                data.qpos[model.jnt_qposadr[jid]] = np.radians(bake_dict[leg])
 
     mujoco.mj_forward(model, data)
-    # ─────────────────────────────────────────────────────────────────────────
 
-    # Both magnetic surfaces need friction and solver params applied.
-    # plate_ids is a set of geom ids — used by apply_mag and _read_contacts.
     plate_ids: set[int] = set()
     for geom_name in ("floor", "wall"):
         gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
         if gid == -1:
-            raise ValueError(f"[sim] Geom '{geom_name}' not found in scene.")
+            raise ValueError(f"[sim] Geom '{geom_name}' not found.")
         plate_ids.add(gid)
         model.geom_friction[gid] = params['ground_friction']
 
@@ -111,271 +108,249 @@ def setup_model(params):
     model.opt.noslip_tolerance  = params['noslip_tolerance']
     model.opt.o_margin          = params['margin']
 
-    # ── Servo and joint dynamics from config ──────────────────────────────
-    model.dof_damping[:]          = JOINT_DAMPING
-    model.dof_armature[:]         = JOINT_ARMATURE
-    # Position servo: gainprm[:,0]=kp, biasprm[:,1]=-kv, biasprm[:,2]=-kp
-    model.actuator_gainprm[:, 0]  = SERVO_KP
-    model.actuator_biasprm[:, 1]  = -SERVO_KV
-    model.actuator_biasprm[:, 2]  = -SERVO_KP
+    model.dof_damping[:]         = JOINT_DAMPING
+    model.dof_armature[:]        = JOINT_ARMATURE
+    model.actuator_gainprm[:, 0] = SERVO_KP
+    model.actuator_biasprm[:, 1] = -SERVO_KV
+    model.actuator_biasprm[:, 2] = -SERVO_KP
 
-    magnet_ids = []
-    for name in MAGNET_BODY_NAMES:
-        mid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
-        if mid == -1: raise ValueError(f"'{name}' body not found")
-        magnet_ids.append(mid)
-
-    # sphere_gids: dict mapping magnet_id → list of sphere geom ids on that body
+    magnet_ids = [
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+        for name in MAGNET_BODY_NAMES
+    ]
     sphere_gids = {
         mid: [
             gid for gid in range(model.ngeom)
-            if model.geom_bodyid[gid] == mid
-            and model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_SPHERE
+            if model.geom_bodyid[gid] == mid and model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_SPHERE
         ]
         for mid in magnet_ids
     }
     return model, data, plate_ids, magnet_ids, sphere_gids
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# apply_mag — one new parameter: magnet_states
-# Only change: skip bodies whose magnet is commanded off.
-# Force math, capping, and xfrc_applied writes are identical to original.
-# ─────────────────────────────────────────────────────────────────────────────
-
 def apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params,
-              magnet_states: dict[str, bool] | None = None):
-    """
-    Apply dipole-dipole forces to all magnet bodies. Returns total Fz.
-
-    Parameters
-    ----------
-    plate_ids : set[int]
-        Geom ids of all magnetic surfaces (floor + wall). Each sampling sphere
-        is tested against every surface; the closest one governs.
-    magnet_states : dict {foot: bool} or None
-        Per-leg magnet enable flag from the planner. If None (phases 1 & 2),
-        all magnets are treated as on — preserving the original settle behaviour.
-    """
+              magnet_states=None, foot_for_mid=None):
+    if foot_for_mid is None:
+        foot_for_mid = {
+            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{f}"): f
+            for f in GAIT_ORDER
+        }
     total_fz = 0.0
-    _fromto  = np.zeros(6)   # scratch buffer per sphere-surface pair
-
-    for idx, mid in enumerate(magnet_ids):
-        # Resolve which foot this body belongs to.
-        body_name = MAGNET_BODY_NAMES[idx]   # e.g. "electromagnet_BL"
-        foot      = body_name.split("_")[-1] # e.g. "BL"
-
-        # Per-leg gate: skip force application if magnet is off.
-        if magnet_states is not None and not magnet_states.get(foot, True):
+    _fromto  = np.zeros(6)
+    for mid in magnet_ids:
+        foot = foot_for_mid.get(mid)
+        if magnet_states is not None and foot is not None and not magnet_states.get(foot, True):
             continue
-
         fvec = np.zeros(3)
         for gid in sphere_gids[mid]:
-            # Find the nearest surface geom and the distance to it.
-            best_dist   = np.inf
-            best_fromto = None
+            best_dist, best_fromto = np.inf, None
             for pid in plate_ids:
                 d = mujoco.mj_geomDistance(model, data, gid, pid, 50.0, _fromto)
                 if d < best_dist:
-                    best_dist   = d
-                    best_fromto = _fromto.copy()
-
+                    best_dist, best_fromto = d, _fromto.copy()
             if best_dist <= 0 or best_dist > params['max_magnetic_distance']:
                 continue
-            f    = mag_force(best_dist, params['Br'])
-            n    = best_fromto[3:6] - best_fromto[0:3]
+            n = best_fromto[3:6] - best_fromto[0:3]
             norm = np.linalg.norm(n)
             if norm < 1e-10:
                 continue
-            fvec += f * (n / norm)
-
+            fvec += mag_force(best_dist, params['Br']) * (n / norm)
         total_mag = np.linalg.norm(fvec)
         if total_mag > params['max_force_per_wheel']:
             fvec *= params['max_force_per_wheel'] / total_mag
-
         data.xfrc_applied[mid, :3] += fvec
         total_fz += fvec[2]
     return total_fz
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Contact detection
-# ─────────────────────────────────────────────────────────────────────────────
+def _rot_z(angle_rad):
+    c, s = np.cos(angle_rad), np.sin(angle_rad)
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=float)
 
-def _build_em_body_ids(model: mujoco.MjModel) -> dict[str, int]:
-    """
-    Build a {foot: body_id} map for the four EM bodies.
-    Called once after setup_model.
-    """
-    ids = {}
+def _arc_pos(hip_pos, p_lifted, angle_rad):
+    center = np.array([hip_pos[0], hip_pos[1], p_lifted[2]])
+    return center + _rot_z(angle_rad) @ (p_lifted - center)
+
+def _build_targets(foot_pos, swing_pos):
+    targets = []
     for foot in GAIT_ORDER:
-        name = f"electromagnet_{foot}"
-        bid  = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
-        if bid == -1:
-            raise ValueError(f"[sim] Body '{name}' not found — check MAGNET_BODY_NAMES.")
-        ids[foot] = bid
-    return ids
+        if foot == TEST_FOOT:
+            targets.append(FootTarget(foot=foot, pos_world=swing_pos.copy(), quat_world=FLOOR_QUAT,
+                                      weight_pos=WEIGHT_POS_SWING_TEST, weight_ori=WEIGHT_ORI_SWING_TEST,
+                                      magnet_on=False))
+        else:
+            targets.append(FootTarget(foot=foot, pos_world=foot_pos[foot].copy(), quat_world=FLOOR_QUAT,
+                                      weight_pos=WEIGHT_POS_STANCE_TEST, weight_ori=WEIGHT_ORI_STANCE_TEST,
+                                      magnet_on=True))
+    return targets
+
+def _print_telemetry(t, phase, phase_t, robot, targets):
+    target_map = {ft.foot: ft for ft in targets}
+    print(f"\nt={t:.2f}s  [{phase}  phase_t={phase_t:.2f}s]")
+    for foot in GAIT_ORDER:
+        actual  = robot.ee_pos_world(foot)
+        planned = target_map[foot].pos_world
+        err_vec_mm = (actual - planned) * 1000
+        err_mm     = np.linalg.norm(err_vec_mm)
+        role = "SWING " if foot == TEST_FOOT else "stance"
+        flag = "  *** BAD TRACK ***" if err_mm > 20.0 else ""
+        print(f"  {foot} [{role}]  "
+              f"plan=({planned[0]:+.3f},{planned[1]:+.3f},{planned[2]:+.3f})  "
+              f"actual=({actual[0]:+.3f},{actual[1]:+.3f},{actual[2]:+.3f})  "
+              f"err=({err_vec_mm[0]:+.1f},{err_vec_mm[1]:+.1f},{err_vec_mm[2]:+.1f})mm  "
+              f"|e|={err_mm:.1f}mm{flag}")
 
 
-def _read_contacts(
-    model:       mujoco.MjModel,
-    data:        mujoco.MjData,
-    plate_ids:   set[int],
-    em_body_ids: dict[str, int],
-) -> dict[str, bool]:
-    """
-    Return {foot: bool} — True if the foot's EM body has an active MuJoCo
-    contact against any magnetic surface geom (floor or wall) this timestep.
+_key_state = {"paused": True, "step_once": False}
 
-    Strategy: scan data.contact[:data.ncon] for any pair where one geom
-    belongs to the EM body and the other is in plate_ids.  A contact is
-    active if dist ≤ params margin (MuJoCo reports contacts within margin
-    before physical touch; threshold here is conservatively 1 mm).
-    """
-    # Collect geom ids that belong to each EM body.
-    em_geom_ids: dict[str, set[int]] = {
-        foot: {
-            gid for gid in range(model.ngeom)
-            if model.geom_bodyid[gid] == bid
-        }
-        for foot, bid in em_body_ids.items()
-    }
-
-    contact_states: dict[str, bool] = {foot: False for foot in GAIT_ORDER}
-
-    for i in range(data.ncon):
-        c    = data.contact[i]
-        g1   = int(c.geom1)
-        g2   = int(c.geom2)
-        dist = float(c.dist)
-
-        if dist > 1e-3:
-            continue
-
-        for foot, gids in em_geom_ids.items():
-            if (g1 in gids and g2 in plate_ids) or \
-               (g2 in gids and g1 in plate_ids):
-                contact_states[foot] = True
-                break
-
-    return contact_states
+def _key_callback(keycode):
+    if keycode in (32, 257):
+        _key_state["paused"] = not _key_state["paused"]
+    elif keycode == 262:
+        _key_state["step_once"] = True
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# run_headless — gait loop
-# ─────────────────────────────────────────────────────────────────────────────
-
-def run_headless(params=None):
-    """
-    Run the crawl-gait simulation headlessly.
-    Returns records list with 't', 'f_mag', and 'gait_phase'.
-    """
+def run(params=None):
     if params is None:
         params = PARAMS
 
     model, data, plate_ids, magnet_ids, sphere_gids = setup_model(params)
-    records = []
+    dt_wall = float(model.opt.timestep) / REAL_TIME_FACTOR
 
-    # ── Phase 1: gravity only ─────────────────────────────────────────────────
-    while data.time < SETTLE_TIME / 2:
-        data.xfrc_applied[:] = 0.0
-        mujoco.mj_step(model, data)
+    foot_for_mid = {
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{f}"): f
+        for f in GAIT_ORDER
+    }
 
-    # ── Phase 2: mag engages, all magnets on ──────────────────────────────────
-    while data.time < SETTLE_TIME:
-        data.xfrc_applied[:] = 0.0
-        if MAG_ENABLED:
-            apply_mag(model, data, sphere_gids, plate_ids, magnet_ids,
-                      params, magnet_states=None)
-        mujoco.mj_step(model, data)
+    phase               = 'SETTLE'
+    phase_t             = 0.0
+    robot               = None
+    foot_pos            = {}
+    lifted_pos          = None
+    hip_pos             = None
+    magnet_states       = {f: True for f in GAIT_ORDER}
+    targets             = []
+    swing_pos           = np.zeros(3)
+    last_print          = -1.0
+    stance_ctrl_targets = {}
+    joint_indices       = {}
+    swing_hip_ctrl      = None
+    swing_hip_aid       = None
 
-    print(f"Settled. Starting crawl gait at t={data.time:.3f}s ...")
+    print("Press SPACE or ENTER to start.")
 
-    # ── Build IK robot — reads current FK for initial foot positions ──────────
-    mujoco.mj_forward(model, data)   # ensure xpos/xmat are current after settle
-    robot = MinkRobot(model, data)
+    with mujoco.viewer.launch_passive(model, data, key_callback=_key_callback) as v:
+        v.cam.distance  = 2.0
+        v.cam.azimuth   = 135
+        v.cam.elevation = -20
+        v.cam.lookat[:] = [-2.0, 0.0, 0.35]
 
-    initial_foot_pos = {foot: robot.ee_pos_world(foot) for foot in GAIT_ORDER}
-    print("[sim] Initial foot positions (world frame):")
-    for foot, pos in initial_foot_pos.items():
-        print(f"  {foot}: {pos}")
+        while v.is_running() and data.time < SIM_DURATION:
 
-    # ── Build trajectory planner ──────────────────────────────────────────────
-    planner = TrajectoryPlanner(
-        surfaces         = SURFACES,
-        initial_foot_pos = initial_foot_pos,
-        body_R_world     = robot.body_R_world,
-        body_pos_world   = robot.body_pos_world,
-        walk_dir         = np.array([1.0, 0.0, 0.0]),   # +X = forward
-        lift_height      = SWING_LIFT_HEIGHT,
-        swing_duration   = SWING_DURATION,
-        demagnetize_hold = DEMAGNETIZE_HOLD,
-        magnetize_hold   = MAGNETIZE_HOLD,
-    )
+            if _key_state["paused"] and not _key_state["step_once"]:
+                v.sync(); time.sleep(0.02); continue
+            _key_state["step_once"] = False
 
-    # ── Pre-build EM body id map for contact detection ────────────────────────
-    em_body_ids = _build_em_body_ids(model)
+            t0 = time.perf_counter()
+            data.xfrc_applied[:] = 0.0
 
-    # ── Phase 3: crawl gait ───────────────────────────────────────────────────
-    _last_print = SETTLE_TIME
-    while data.time < SIM_DURATION:
-        data.xfrc_applied[:] = 0.0
+            if phase == 'SETTLE':
+                if data.time >= SETTLE_TIME / 2 and MAG_ENABLED:
+                    apply_mag(model, data, sphere_gids, plate_ids, magnet_ids,
+                              params, magnet_states=None, foot_for_mid=foot_for_mid)
 
-        # 1. Contact sensing.
-        contact_states = _read_contacts(model, data, plate_ids, em_body_ids)
+                if data.time >= SETTLE_TIME:
+                    mujoco.mj_forward(model, data)
+                    robot    = MinkRobot(model, data)
+                    foot_pos = {f: robot.ee_pos_world(f) for f in GAIT_ORDER}
+                    hip_pos  = robot.body_pos_world() + robot.body_R_world() @ HIP_OFFSET_BODY[TEST_FOOT]
+                    lifted_pos = foot_pos[TEST_FOOT] + np.array([0.0, 0.0, LIFT_HEIGHT])
+                    swing_pos  = foot_pos[TEST_FOOT].copy()
+                    magnet_states[TEST_FOOT] = False
 
-        # 2. Planner step → foot targets + desired magnet states.
-        foot_targets   = planner.step(TIMESTEP, contact_states)
-        magnet_states  = planner.magnet_states()
+                    for foot in GAIT_ORDER:
+                        set_leg_stiffness(model, foot, is_stance=(foot != TEST_FOOT))
 
-        # 3. IK → writes data.ctrl (position servos).
-        robot.solve_ik(foot_targets, TIMESTEP)
+                    for foot in GAIT_ORDER:
+                        if foot == TEST_FOOT:
+                            continue
+                        for joint_name in LEG_JOINTS[foot]:
+                            jid  = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+                            qidx = model.jnt_qposadr[jid]
+                            aid  = CTRL_JOINT_ORDER.index(joint_name)
+                            joint_indices[(foot, joint_name)]       = (qidx, aid)
+                            stance_ctrl_targets[(foot, joint_name)] = data.qpos[qidx]
 
-        # 4. Magnetic force application — per-leg gated by planner magnet state.
-        f_mag_z = 0.0
-        if MAG_ENABLED:
-            f_mag_z = apply_mag(
-                model, data, sphere_gids, plate_ids, magnet_ids,
-                params, magnet_states=magnet_states,
-            )
+                    hip_name       = f"hip_pitch_{TEST_FOOT}"
+                    hip_jid        = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, hip_name)
+                    swing_hip_aid  = CTRL_JOINT_ORDER.index(hip_name)
+                    swing_hip_ctrl = data.qpos[model.jnt_qposadr[hip_jid]]
 
-        records.append({
-            't':          data.time,
-            'f_mag':      -f_mag_z,
-            'gait_phase': planner.phase.value,
-            'swing_foot': planner.swing_foot,
-        })
+                    phase, phase_t = 'LIFT', 0.0
+                    print(f"\n[sim] SETTLE done at t={data.time:.2f}s")
+                    print(f"  {TEST_FOOT} contact : {foot_pos[TEST_FOOT]}")
+                    print(f"  {TEST_FOOT} lifted  : {lifted_pos}")
+                    print(f"  hip pivot           : {hip_pos}")
+                    print(f"  arc end ({ARC_DEG:.0f}° CCW) : {_arc_pos(hip_pos, lifted_pos, np.radians(ARC_DEG))}")
 
-        if data.time - _last_print >= TELEMETRY_INTERVAL:
-            _last_print = data.time
-            swing = planner.swing_foot or '—'
-            conts = [f for f, v in contact_states.items() if v]
-            mags  = [f for f, v in magnet_states.items() if v]
-            print(
-                f"\nt={data.time:.2f}s  [CRAWL]  "
-                f"gait={planner.phase.value}  swing={swing}  "
-                f"phase_t={planner._phase_t:.2f}s  F_mag={-f_mag_z:.1f}N"
-            )
-            if foot_targets:
-                target_map = {ft.foot: ft for ft in foot_targets}
-                for foot in GAIT_ORDER:
-                    ft = target_map[foot]
-                    role    = 'SWING ' if foot == planner.swing_foot else 'stance'
-                    contact = '●' if contact_states.get(foot) else '○'
-                    mag     = 'M' if magnet_states.get(foot) else 'm'
-                    p = ft.pos_world
-                    print(f"  {foot} [{role}]  contact={contact}  mag={mag}  "
-                          f"target=({p[0]:+.3f}, {p[1]:+.3f}, {p[2]:+.3f})  "
-                          f"w_pos={ft.weight_pos:.1f}")
+            else:
+                phase_t += TIMESTEP
 
-        mujoco.mj_step(model, data)
+                if phase == 'LIFT':
+                    swing_pos = (1 - _quintic(min(phase_t / LIFT_DUR, 1.0))) * foot_pos[TEST_FOOT] + \
+                                _quintic(min(phase_t / LIFT_DUR, 1.0)) * lifted_pos
+                    if phase_t >= LIFT_DUR:
+                        phase, phase_t = 'ARC_OUT', 0.0; print("[sim] LIFT done → ARC_OUT")
 
-    print(f"Done. Mean magnetic force: {np.mean([r['f_mag'] for r in records]):.2f} N")
-    return records
+                elif phase == 'ARC_OUT':
+                    swing_pos = _arc_pos(hip_pos, lifted_pos, np.radians(ARC_DEG) * _quintic(phase_t / ARC_DUR))
+                    if phase_t >= ARC_DUR:
+                        phase, phase_t = 'ARC_BACK', 0.0; print("[sim] ARC_OUT done → ARC_BACK")
+
+                elif phase == 'ARC_BACK':
+                    swing_pos = _arc_pos(hip_pos, lifted_pos, np.radians(ARC_DEG) * (1.0 - _quintic(phase_t / ARC_DUR)))
+                    if phase_t >= ARC_DUR:
+                        phase, phase_t = 'LOWER', 0.0; print("[sim] ARC_BACK done → LOWER")
+
+                elif phase == 'LOWER':
+                    s = _quintic(phase_t / LIFT_DUR)
+                    swing_pos = (1 - s) * lifted_pos + s * foot_pos[TEST_FOOT]
+                    if phase_t >= LIFT_DUR:
+                        for foot in GAIT_ORDER:
+                            set_leg_stiffness(model, foot, is_stance=True)
+                        magnet_states[TEST_FOOT] = True
+                        phase, phase_t = 'DONE', 0.0; print("[sim] LOWER done → DONE")
+
+                elif phase == 'DONE':
+                    swing_pos = foot_pos[TEST_FOOT].copy()
+
+                curr = robot.ee_pos_world(TEST_FOOT).copy()
+                if np.linalg.norm(curr - swing_pos) < 0.003:
+                    swing_pos = curr
+
+                targets = _build_targets(foot_pos, swing_pos)
+                robot.solve_ik(targets, TIMESTEP)
+
+                if phase == 'LIFT':
+                    data.ctrl[swing_hip_aid] = swing_hip_ctrl
+
+                lock_stance_joints(data, TEST_FOOT, stance_ctrl_targets, joint_indices)
+
+                if MAG_ENABLED:
+                    apply_mag(model, data, sphere_gids, plate_ids, magnet_ids,
+                              params, magnet_states=magnet_states, foot_for_mid=foot_for_mid)
+
+                if data.time - last_print >= TELEMETRY_INTERVAL:
+                    last_print = data.time
+                    _print_telemetry(data.time, phase, phase_t, robot, targets)
+
+            mujoco.mj_step(model, data)
+            v.sync()
+
+            elapsed = time.perf_counter() - t0
+            if dt_wall - elapsed > 0:
+                time.sleep(dt_wall - elapsed)
 
 
 if __name__ == "__main__":
-    run_headless()
-
-    import viewer
-    viewer.run_viewer()
+    run()
