@@ -34,7 +34,7 @@
          X extents: -2.5 → +0.5  (far edge flush with wall inner face at X=0.5)
          Center shifted to X=-1.0 so size.x=1.5 spans the full 3 m -->
     <geom name="floor" type="box"
-          pos="-1.0 0 -0.005" size="1.5 0.5 0.005"
+          pos="-1.0 0 -0.05" size="1.5 0.5 0.05"
           condim="6" friction="0.8 0.005 0.0001"
           contype="1" conaffinity="1"
           material="steel"/>
