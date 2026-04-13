@@ -22,16 +22,28 @@ ARROW_RADIUS       = 0.004
 MAG_ARROW_SCALE    = 0.001
 TELEMETRY_INTERVAL = 0.5
 
+# PARAMS = {
+#     'ground_friction':       [0.130563, 0.00256843, 1.13878e-05],
+#     'solref':                [0.00192329, 10.0],
+#     'solimp':                [0.361806, 0.9999, 0.00065636, 0.603088, 3.97107],
+#     'noslip_iterations':     31,
+#     'noslip_tolerance':      2.42366e-05,
+#     'margin':                0.00149908,
+#     'Br':                    1.32665,
+#     'max_magnetic_distance': 0.0706161,
+#     'max_force_per_wheel':   917.216,
+# }
+
 PARAMS = {
-    'ground_friction':       [0.130563, 0.00256843, 1.13878e-05],
-    'solref':                [0.00192329, 10.0],
-    'solimp':                [0.361806, 0.9999, 0.00065636, 0.603088, 3.97107],
-    'noslip_iterations':     31,
-    'noslip_tolerance':      2.42366e-05,
-    'margin':                0.00149908,
-    'Br':                    1.32665,
-    'max_magnetic_distance': 0.0706161,
-    'max_force_per_wheel':   917.216,
+    'ground_friction':       [0.054176, 0.181922, 7.4833e-06],
+    'solref':                [0.00854906, 10.0],
+    'solimp':                [0.153179, 0.9999, 0.000654778, 0.417417, 3.69318],
+    'noslip_iterations':     30,
+    'noslip_tolerance':      7.13222e-05,
+    'margin':                0.00388617,
+    'Br':                    1.78509,
+    'max_magnetic_distance': 0.0816543,
+    'max_force_per_wheel':   803.941,
 }
 
 JOINT_DAMPING  = 5.0
@@ -48,6 +60,11 @@ SWING_LIFT_HEIGHT = 0.1
 STEP_LENGTH       = 0.3
 DEMAGNETIZE_HOLD  = 0.10
 MAGNETIZE_HOLD    = 0.15
+
+# ── sequence selector ───────────────────────────────────────────────────
+# Options: "basic"   lift → swing → reach → drop
+#          "orient"  lift → swing → reach (EE face +X) → drop
+SEQUENCE = "orient"
 
 KNEE_GEOM_ZERO = {
     'FL': np.array([ 0.07280,  0.07280, -0.04432]),

@@ -44,9 +44,6 @@
     <!-- damping 1 Nm.s/rad, armature 0.01 kg.m^2 -->
     <joint damping="1.0" armature="0.01"/>
 
-    <!-- position-servo default gain -->
-    <position kp="100" kv="10"/>
-    <!-- <position /> -->
   </default>
 
   <!-- ─── Assets ───────────────────────────────────────────────────────────── -->
@@ -81,33 +78,33 @@
 
       <!-- ════════════════════════ BACK-LEFT (BLUE) ══════════════════ -->
       <body name="hip_link_BL" pos="-0.0965 0.092 0.023">
-        <joint name="hip_pitch_BL" type="hinge" axis="0 0 1" range="-90 90"/>
+        <joint name="hip_pitch_BL" type="hinge" axis="0 0 1" range="-45 45" />
         <geom name="hip_geom_BL" type="cylinder"
               fromto="0 0 0  -0.03350 0.03350 0.060"
               size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
 
         <body name="knee_link_BL" pos="-0.03350 0.03350 0.060">
-          <joint name="knee_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-45 45"/>
+          <joint name="knee_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-180 180" />
           <geom name="knee_geom_BL" type="cylinder"
                 fromto="0 0 0  -0.07280 0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
 
           <body name="wrist_link_BL" pos="-0.07280 0.07280 -0.04432">
-            <joint name="wrist_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-67.5 67.5"/>
+            <joint name="wrist_BL" type="hinge" axis="0.7071068 0.7071068 0" range="-180 180" />
             <geom name="wrist_geom_BL" type="cylinder"
                   fromto="0 0 0  -0.07425 0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="0.1 0.3 1.0 1"/>
 
             <body name="EE_BL" pos="-0.07425 0.07425 -0.18187" quat="0.7071 0 0.7071 0">
-              <joint name="ee_BL" type="hinge" axis="0 0.7071068 0.7071068" range="-45 45"/>
-              <joint name="ee2_BL" type="hinge" axis="0 0.7071068 -0.7071068" range="-30 30" stiffness="0" damping="0"/>
+              <joint name="ee_BL" type="hinge" axis="0 0.7071068 0.7071068" range="-180 180" />
+              <joint name="ee2_BL" type="hinge" axis="0 0.7071068 -0.7071068" range="-180 180"  stiffness="1.0" damping="0.3"/>
               <geom name="ee_link_geom_BL" type="cylinder"
                     fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="0.1 0.3 1.0 1"/>
               <body name="electromagnet_BL" pos="0.066075 0.000000 0.000000" quat="-0.5 0.5 0.5 0.5">
-                <joint name="em_z_BL" type="hinge" axis="0 -1 0" range="-45 45" stiffness="0" damping="0"/>
+                <joint name="em_z_BL" type="hinge" axis="0 -1 0" range="-180 180"  stiffness="1.0" damping="0.3"/>
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
-                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" mass="0.35"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -124,33 +121,33 @@
 
       <!-- ════════════════════════ FRONT-LEFT (RED) ══════════════════ -->
       <body name="hip_link_FL" pos="0.0965 0.092 0.023">
-        <joint name="hip_pitch_FL" type="hinge" axis="0 0 1" range="-90 90"/>
+        <joint name="hip_pitch_FL" type="hinge" axis="0 0 1" range="-45 45" />
         <geom name="hip_geom_FL" type="cylinder"
               fromto="0 0 0  0.03350 0.03350 0.060"
               size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
 
         <body name="knee_link_FL" pos="0.03350 0.03350 0.060">
-          <joint name="knee_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-45 45"/>
+          <joint name="knee_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-180 180" />
           <geom name="knee_geom_FL" type="cylinder"
                 fromto="0 0 0  0.07280 0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
 
           <body name="wrist_link_FL" pos="0.07280 0.07280 -0.04432">
-            <joint name="wrist_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-67.5 67.5"/>
+            <joint name="wrist_FL" type="hinge" axis="0.7071068 -0.7071068 0" range="-180 180" />
             <geom name="wrist_geom_FL" type="cylinder"
                   fromto="0 0 0  0.07425 0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="1.0 0.1 0.1 1"/>
 
             <body name="EE_FL" pos="0.07425 0.07425 -0.18187" quat="0.7071 0 0.7071 0">
-              <joint name="ee_FL" type="hinge" axis="0 -0.7071068 0.7071068" range="-45 45"/>
-              <joint name="ee2_FL" type="hinge" axis="0 0.7071068 0.7071068" range="-30 30" stiffness="0" damping="0"/>
+              <joint name="ee_FL" type="hinge" axis="0 -0.7071068 0.7071068" range="-180 180" />
+              <joint name="ee2_FL" type="hinge" axis="0 0.7071068 0.7071068" range="-180 180"  stiffness="1.0" damping="0.3"/>
               <geom name="ee_link_geom_FL" type="cylinder"
                     fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="1.0 0.1 0.1 1"/>
               <body name="electromagnet_FL" pos="0.066075 0.000000 0.000000" quat="0.5 0.5 0.5 -0.5">
-                <joint name="em_z_FL" type="hinge" axis="0 -1 0" range="-45 45" stiffness="0" damping="0"/>
+                <joint name="em_z_FL" type="hinge" axis="0 -1 0" range="-180 180"  stiffness="1.0" damping="0.3"/>
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
-                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" mass="0.35"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -167,33 +164,33 @@
 
       <!-- ════════════════════════ BACK-RIGHT (BLACK) ════════════════ -->
       <body name="hip_link_BR" pos="-0.0965 -0.092 0.023">
-        <joint name="hip_pitch_BR" type="hinge" axis="0 0 1" range="-90 90"/>
+        <joint name="hip_pitch_BR" type="hinge" axis="0 0 1" range="-45 45" />
         <geom name="hip_geom_BR" type="cylinder"
               fromto="0 0 0  -0.03350 -0.03350 0.060"
               size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
 
         <body name="knee_link_BR" pos="-0.03350 -0.03350 0.060">
-          <joint name="knee_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-45 45"/>
+          <joint name="knee_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-180 180" />
           <geom name="knee_geom_BR" type="cylinder"
                 fromto="0 0 0  -0.07280 -0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
 
           <body name="wrist_link_BR" pos="-0.07280 -0.07280 -0.04432">
-            <joint name="wrist_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-67.5 67.5"/>
+            <joint name="wrist_BR" type="hinge" axis="-0.7071068 0.7071068 0" range="-180 180" />
             <geom name="wrist_geom_BR" type="cylinder"
                   fromto="0 0 0  -0.07425 -0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="0.1 0.1 0.1 1"/>
 
             <body name="EE_BR" pos="-0.07425 -0.07425 -0.18187" quat="0.7071 0 0.7071 0">
-              <joint name="ee_BR" type="hinge" axis="0 0.7071068 -0.7071068" range="-45 45"/>
-              <joint name="ee2_BR" type="hinge" axis="0 0.7071068 0.7071068" range="-30 30" stiffness="0" damping="0"/>
+              <joint name="ee_BR" type="hinge" axis="0 0.7071068 -0.7071068" range="-180 180" />
+              <joint name="ee2_BR" type="hinge" axis="0 0.7071068 0.7071068" range="-180 180"  stiffness="1.0" damping="0.3"/>
               <geom name="ee_link_geom_BR" type="cylinder"
                     fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="0.1 0.1 0.1 1"/>
               <body name="electromagnet_BR" pos="0.066075 0.000000 0.000000" quat="0.5 0.5 0.5 -0.5">
-                <joint name="em_z_BR" type="hinge" axis="0 -1 0" range="-45 45" stiffness="0" damping="0"/>
+                <joint name="em_z_BR" type="hinge" axis="0 -1 0" range="-180 180"  stiffness="1.0" damping="0.3"/>
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
-                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" mass="0.35"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
@@ -210,33 +207,33 @@
 
       <!-- ════════════════════════ FRONT-RIGHT (GREEN) ═══════════════ -->
       <body name="hip_link_FR" pos="0.0965 -0.092 0.023">
-        <joint name="hip_pitch_FR" type="hinge" axis="0 0 1" range="-90 90"/>
+        <joint name="hip_pitch_FR" type="hinge" axis="0 0 1" range="-45 45" />
         <geom name="hip_geom_FR" type="cylinder"
               fromto="0 0 0  0.03350 -0.03350 0.060"
               size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
 
         <body name="knee_link_FR" pos="0.03350 -0.03350 0.060">
-          <joint name="knee_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-45 45"/>
+          <joint name="knee_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-180 180" />
           <geom name="knee_geom_FR" type="cylinder"
                 fromto="0 0 0  0.07280 -0.07280 -0.04432"
                 size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
 
           <body name="wrist_link_FR" pos="0.07280 -0.07280 -0.04432">
-            <joint name="wrist_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-67.5 67.5"/>
+            <joint name="wrist_FR" type="hinge" axis="-0.7071068 -0.7071068 0" range="-180 180" />
             <geom name="wrist_geom_FR" type="cylinder"
                   fromto="0 0 0  0.07425 -0.07425 -0.18187"
                   size="0.015" class="cf_link" rgba="0.1 0.8 0.1 1"/>
 
             <body name="EE_FR" pos="0.07425 -0.07425 -0.18187" quat="0.7071 0 0.7071 0">
-              <joint name="ee_FR" type="hinge" axis="0 -0.7071068 -0.7071068" range="-45 45"/>
-              <joint name="ee2_FR" type="hinge" axis="0 0.7071068 -0.7071068" range="-30 30" stiffness="0" damping="0"/>
+              <joint name="ee_FR" type="hinge" axis="0 -0.7071068 -0.7071068" range="-180 180" />
+              <joint name="ee2_FR" type="hinge" axis="0 0.7071068 -0.7071068" range="-180 180"  stiffness="1.0" damping="0.3"/>
               <geom name="ee_link_geom_FR" type="cylinder"
                     fromto="0 0 0  0.066000 0.000000 0.000000"
                     size="0.0115" class="cf_link" rgba="0.1 0.8 0.1 1"/>
               <body name="electromagnet_FR" pos="0.066075 0.000000 0.000000" quat="-0.5 0.5 0.5 0.5">
-                <joint name="em_z_FR" type="hinge" axis="0 -1 0" range="-45 45" stiffness="0" damping="0"/>
+                <joint name="em_z_FR" type="hinge" axis="0 -1 0" range="-180 180"  stiffness="1.0" damping="0.3"/>
                 <geom type="mesh" class="visual"    mesh="1103___pp___aws_pem_215lbs__eml63mm_24" rgba="0.9 0.1 0.1 0.35"/>
-                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" density="7900"/>
+                <geom type="mesh" class="collision" mesh="1103___pp___aws_pem_215lbs__eml63mm_24" mass="0.35"/>
                 <geom type="sphere" size="0.002" pos="+0.022000 +0.012500 +0.000000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.015556 +0.012500 +0.015556" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
                 <geom type="sphere" size="0.002" pos="+0.000000 +0.012500 +0.022000" contype="0" conaffinity="0" mass="1e-6" rgba="0 0 1 1"/>
