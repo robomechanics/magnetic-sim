@@ -16,7 +16,6 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 import mink
-from scipy.optimize import minimize, differential_evolution
 
 # ── paths ──────────────────────────────────────────────────────────────
 LEGGED_DIR = os.path.join(os.path.dirname(__file__), "..", "legged_sim")
@@ -46,9 +45,7 @@ def mag_force(dist, Br):
     m = (Br * MAGNET_VOLUME) / MU_0
     return (3 * MU_0 * m**2) / (2 * np.pi * (2 * dist)**4)
 
-def apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, off_mids=None):
-    if off_mids is None:
-        off_mids = set()
+def apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, off_mids=frozenset()):
     _ft = np.zeros(6)
     for mid in magnet_ids:
         if mid in off_mids:
@@ -134,25 +131,21 @@ def _se3_pos_rot(pos, face_axis, current_rot=None):
     # Aligns EE local -Y to face_axis using the minimal rotation from current_rot.
     # If current_rot is None, falls back to Gram-Schmidt (used only on first call).
     #
-    # Why minimal rotation: mink FrameTask minimises full-SO3 error (all 3 axes).
-    # Gram-Schmidt picks arbitrary X/Z which mink then fights to reach, causing
-    # poor convergence. Minimal rotation keeps X/Z close to their current values
-    # so the only non-trivial error is the -Y axis we actually care about.
+    # Minimal rotation keeps X/Z close to their current values so mink only
+    # needs to correct the -Y axis, improving convergence.
     goal = np.asarray(face_axis, float)
     goal /= np.linalg.norm(goal)
 
     if current_rot is not None:
-        cur_neg_y = -current_rot[:, 1]          # current EE local -Y in world frame
+        cur_neg_y = -current_rot[:, 1]
         axis      = np.cross(cur_neg_y, goal)
         sin_a     = np.linalg.norm(axis)
         cos_a     = float(np.dot(cur_neg_y, goal))
 
         if sin_a < 1e-6:
-            # already aligned or exactly anti-aligned
             if cos_a >= 0:
                 R = current_rot.copy()
             else:
-                # 180° rotation around any axis perpendicular to cur_neg_y
                 perp  = np.array([1., 0., 0.]) if abs(cur_neg_y[0]) < 0.9 else np.array([0., 1., 0.])
                 perp -= np.dot(perp, cur_neg_y) * cur_neg_y
                 perp /= np.linalg.norm(perp)
@@ -168,7 +161,7 @@ def _se3_pos_rot(pos, face_axis, current_rot=None):
             R_delta = np.eye(3) + sin_a * K + (1. - cos_a) * (K @ K)
             R = R_delta @ current_rot
     else:
-        # Gram-Schmidt fallback (first call before any current_rot is available)
+        # Gram-Schmidt fallback (first call, no current_rot available)
         neg_y = goal
         y     = -neg_y
         up    = np.array([0., 0., 1.]) if abs(y[2]) < 0.9 else np.array([0., 1., 0.])
@@ -204,17 +197,10 @@ class IKSolver:
             model=model, cost=0.01, lm_damping=IK_DAMPING)
         self.config_limit = mink.ConfigurationLimit(model)
 
-        frozen_dofs = []  # ee2_ and em_z_ free; stiffness set in XML
-        self.freeze_passive = None
-        print(f"[ik] frozen passive DOFs: {frozen_dofs}")
-
         self.ctrl_jids      = [model.actuator_trnid[i, 0] for i in range(model.nu)]
         self.stance_targets = {}
-        self._ik_qpos       = None
-        self._warn_counter  = 0          # throttle: print warning every N solves
-        self._hold_start_t  = None       # sim time when HOLD phase began
-        self._hold_start_ctrl = None     # ctrl values at HOLD entry (interpolation start)
-        self.HOLD_DURATION  = 3.0        # seconds to blend from swing pose to seed pose
+        self._warn_counter  = 0
+        self._ori_target_rot = None   # cached once per orientation phase; None when no face_axis
 
     def ee_pos(self, data, foot):
         return data.xpos[self.ee_bids[foot]].copy()
@@ -233,105 +219,61 @@ class IKSolver:
             tag = " (swing)" if f == SWING_FOOT else ""
             print(f"  {f}: [{p[0]:.4f}, {p[1]:.4f}, {p[2]:.4f}]{tag}")
 
-    def solve_orientation_seed(self, phys_data, face_axis, landing_pos=None):
-        """
-        One-shot global FK search for FL joint angles that best align EE local -Y
-        with face_axis, while staying near landing_pos (swing end position).
-        Called once at HOLD entry to warm-start mink's _ik_qpos.
-
-        Strategy:
-          Pass 1 — differential_evolution for global exploration (no gradient needed).
-          Pass 2 — L-BFGS-B local polish from DE's best solution.
-
-        Returns a full qpos array seeded with the best found FL joint angles.
-        """
-        goal    = np.asarray(face_axis, float)
-        goal   /= np.linalg.norm(goal)
-        ee_bid  = self.ee_bids[SWING_FOOT]
-        scratch = mujoco.MjData(self.model)
-
-        # collect FL actuated joints: (jid, qposadr)
-        fl_joints = []
-        for i in range(self.model.nu):
-            jid   = self.model.actuator_trnid[i, 0]
-            jname = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, jid)
-            if jname and SWING_FOOT in jname:
-                fl_joints.append((jid, self.model.jnt_qposadr[jid]))
-
-        bounds = []
-        for jid, _ in fl_joints:
-            if self.model.jnt_limited[jid]:
-                bounds.append(tuple(self.model.jnt_range[jid]))
-            else:
-                bounds.append((-np.pi, np.pi))
-
-        # snapshot EE position at HOLD entry as the position anchor
-        anchor = landing_pos if landing_pos is not None else phys_data.xpos[ee_bid].copy()
-
-        def objective(x):
-            scratch.qpos[:] = phys_data.qpos[:]
-            for k, (_, qadr) in enumerate(fl_joints):
-                scratch.qpos[qadr] = x[k]
-            mujoco.mj_kinematics(self.model, scratch)
-            neg_y   = -scratch.xmat[ee_bid].reshape(3, 3)[:, 1]
-            ee_pos  = scratch.xpos[ee_bid].copy()
-
-            ori_err = np.degrees(np.arccos(np.clip(np.dot(neg_y, goal), -1., 1.)))
-            pos_err = np.linalg.norm(ee_pos - anchor) * 100  # scale to ~degree units
-
-            return ori_err + pos_err
-
-        x0 = np.array([phys_data.qpos[qadr] for _, qadr in fl_joints])
-        print(f"[ik] HOLD entry — warm-start FK search (initial ang={objective(x0):.1f}°)...")
-
-        de  = differential_evolution(objective, bounds, maxiter=300, tol=1e-4,
-                                     seed=42, popsize=12, workers=1, x0=x0)
-        res = minimize(objective, de.x, method="L-BFGS-B", bounds=bounds,
-                       options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-8})
-
-        print(f"[ik] warm-start done — seed ang={res.fun:.1f}°  "
-              f"(DE: {de.fun:.1f}°  polish: {res.fun:.1f}°)")
-
-        seed_qpos = phys_data.qpos.copy()
-        for k, (_, qadr) in enumerate(fl_joints):
-            seed_qpos[qadr] = res.x[k]
-        return seed_qpos
-
     def solve(self, swing_target, phys_data, dt, n_iter=10, face_axis=None,
               position_cost=None, orientation_cost=None, sim_t=None):
+
+        ik_qpos  = phys_data.qpos.copy()
+        pos_cost = position_cost    if position_cost    is not None else 10.0
+        ori_cost = orientation_cost if orientation_cost is not None else 0.0
+
+        ee_bid      = self.ee_bids[SWING_FOOT]
+        current_rot = phys_data.xmat[ee_bid].reshape(3, 3).copy()
+
         if face_axis is not None:
-            if self._ik_qpos is None:
-                # warm-start: global FK search finds exact orientation solution
-                self._ik_qpos = self.solve_orientation_seed(
-                    phys_data, face_axis, landing_pos=swing_target)
-                # snapshot ctrl values right at HOLD entry for interpolation
-                self._hold_start_t = sim_t
-                self._hold_start_ctrl = np.array([
-                    phys_data.qpos[self.model.jnt_qposadr[jid]]
-                    for jid in self.ctrl_jids])
-
-            # quintic smooth-step interpolation from swing landing pose → seed pose
-            seed_ctrl = np.array([
-                self._ik_qpos[self.model.jnt_qposadr[jid]]
-                for jid in self.ctrl_jids])
-
-            if self._hold_start_t is not None and sim_t is not None:
-                t_rel = sim_t - self._hold_start_t
-                s = np.clip(t_rel / self.HOLD_DURATION, 0.0, 1.0)
-                s = s**3 * (6*s**2 - 15*s + 10)   # quintic ease
-            else:
-                s = 1.0  # no time info → snap immediately
-
-            ctrl = self._hold_start_ctrl + s * (seed_ctrl - self._hold_start_ctrl)
-            return ctrl
+            # Cache the target rotation on first entry into an orientation phase.
+            # Recomputing from current_rot every step causes the target to drift
+            # as physics lags the IK solution, making mink diverge.
+            if self._ori_target_rot is None:
+                goal = np.asarray(face_axis, float)
+                goal /= np.linalg.norm(goal)
+                cur_neg_y = -current_rot[:, 1]
+                axis  = np.cross(cur_neg_y, goal)
+                sin_a = np.linalg.norm(axis)
+                cos_a = float(np.dot(cur_neg_y, goal))
+                if sin_a < 1e-6:
+                    R = current_rot.copy() if cos_a >= 0 else (
+                        (-np.eye(3) + 2 * np.outer(cur_neg_y, cur_neg_y)) @ current_rot)
+                else:
+                    axis /= sin_a
+                    K = np.array([[0, -axis[2], axis[1]],
+                                  [axis[2], 0, -axis[0]],
+                                  [-axis[1], axis[0], 0]])
+                    R = (np.eye(3) + sin_a * K + (1. - cos_a) * (K @ K)) @ current_rot
+                self._ori_target_rot = R
+                print(f"[ik] orientation target locked — "
+                      f"EE -Y → {(-R[:, 1]).round(3)}")
+            T = np.eye(4)
+            T[:3, :3] = self._ori_target_rot
+            T[:3,  3] = swing_target
+            target_se3 = mink.SE3.from_matrix(T)
         else:
-            ik_qpos = phys_data.qpos.copy()
-            self._ik_qpos = None          # reset so warm-start fires on next face_axis entry
-            self._hold_start_t    = None  # reset interpolation state
-            self._hold_start_ctrl = None
-            self.foot_tasks[SWING_FOOT].set_target(_se3_pos(swing_target))
-            self.foot_tasks[SWING_FOOT].position_cost    = 10.0
-            self.foot_tasks[SWING_FOOT].orientation_cost = 0.0
+            self._ori_target_rot = None   # reset for next orientation phase
+            target_se3 = _se3_pos(swing_target)
+
+        # Reconstruct the FL FrameTask when orientation cost changes.
+        # mink may bake costs at construction; runtime assignment is not guaranteed
+        # to take effect, so we rebuild to ensure ori_cost is always active.
+        if self.foot_tasks[SWING_FOOT].orientation_cost != ori_cost:
+            self.foot_tasks[SWING_FOOT] = mink.FrameTask(
+                frame_name=f"electromagnet_{SWING_FOOT}", frame_type="body",
+                position_cost=pos_cost, orientation_cost=ori_cost,
+                lm_damping=IK_DAMPING)
+        self.foot_tasks[SWING_FOOT].set_target(target_se3)
+        self.foot_tasks[SWING_FOOT].position_cost = pos_cost
+
+        # body orientation cost competes with EE orientation; zero it out
+        # during orientation phases so the EE task has uncontested DOF.
+        self.body_task.orientation_cost = 0.0 if face_axis is not None else 50.0
 
         for foot in FEET:
             if foot != SWING_FOOT:
@@ -340,8 +282,7 @@ class IKSolver:
 
         tasks = ([self.body_task]
                  + [self.foot_tasks[f] for f in FEET]
-                 + [self.posture_task]
-                 + ([self.freeze_passive] if self.freeze_passive else []))
+                 + [self.posture_task])
 
         for _ in range(n_iter):
             self.config.update(ik_qpos)
@@ -350,36 +291,9 @@ class IKSolver:
                                     limits=[self.config_limit])
             ik_qpos = self.config.integrate(vel, dt)
 
-        # convergence check
-        # NOTE: ori_res measures full SO3 error (all 3 axes) and will read large
-        # even when the Y axis is close, because Gram-Schmidt assigns arbitrary X/Z
-        # to the target frame. ang_diff is the true metric: angle between EE local
-        # -Y and the face_axis goal. Gate the warning on ang_diff, not ori_res.
-        if face_axis is not None:
-            self.config.update(ik_qpos)
-            T        = self.foot_tasks[SWING_FOOT].compute_error(self.config)
-            pos_res  = np.linalg.norm(T[:3]) * 1000
-            ori_res  = np.degrees(np.linalg.norm(T[3:]))  # full SO3, kept for reference only
-            ee_neg_y = -self.config.data.xmat[self.ee_bids[SWING_FOOT]].reshape(3, 3)[:, 1]
-            fa_norm  = np.asarray(face_axis) / np.linalg.norm(face_axis)
-            ang_diff = np.degrees(np.arccos(np.clip(np.dot(ee_neg_y, fa_norm), -1., 1.)))
-            self._warn_counter += 1
-            if ang_diff > 5.0 and self._warn_counter % 50 == 0:
-                joint_strs = []
-                for i, jid in enumerate(self.ctrl_jids):
-                    jname = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, jid)
-                    if jname and SWING_FOOT in jname:
-                        val = np.degrees(ik_qpos[self.model.jnt_qposadr[jid]])
-                        joint_strs.append(f"{jname.replace('_'+SWING_FOOT,'')}={val:.1f}°")
-                print(f"[ik] ⚠ ori not converged:  "
-                      f"ang={ang_diff:.1f}°  pos_res={pos_res:.1f}mm  "
-                      f"joints: {' '.join(joint_strs)}")
-
         ctrl = np.zeros(self.model.nu)
         for i, jid in enumerate(self.ctrl_jids):
             ctrl[i] = ik_qpos[self.model.jnt_qposadr[jid]]
-        if face_axis is not None:
-            self._ik_qpos = ik_qpos   # persist for next face_axis step
         return ctrl
 
 
@@ -424,11 +338,10 @@ def main():
 
     # ── wall distance raycast + FK reachability (used by "f2w" sequence) ─
     _wall_gid      = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall")
-    _ray_geomgroup = np.zeros(6, np.uint8)          # all geom groups enabled
-    _geomid_out    = np.array([-1], dtype=np.int32) # mj_ray writes hit geom id here
+    _ray_geomgroup = np.zeros(6, np.uint8)
+    _geomid_out    = np.array([-1], dtype=np.int32)
 
     # Pre-compute FL max reach from hip by FK corner-sweep of all joint limits.
-    # Runs once at startup; used to gate the f2w sequence at settle time.
     def _compute_fl_max_reach():
         from itertools import product as iproduct
         scratch   = mujoco.MjData(model)
@@ -441,11 +354,11 @@ def main():
                 mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT,
                                   model.actuator_trnid[i, 0]) or "")
         ]
-        limit_vals = []
-        for jid, _ in fl_joints:
-            lo, hi = (model.jnt_range[jid] if model.jnt_limited[jid]
-                      else np.array([-np.pi, np.pi]))
-            limit_vals.append([float(lo), float(hi)])
+        limit_vals = [
+            [float(lo), float(hi)] if model.jnt_limited[jid] else [-np.pi, np.pi]
+            for jid, _ in fl_joints
+            for lo, hi in [model.jnt_range[jid]]
+        ]
         best = 0.0
         for combo in iproduct(*limit_vals):
             scratch.qpos[:] = data.qpos[:]
@@ -461,28 +374,16 @@ def main():
     print(f"[f2w] FL max reach from hip: {_fl_max_reach * 1000:.1f} mm")
 
     def _wall_dist_fn(ray_dir_override=None):
-        """
-        Ray from EE origin toward the wall.
-        Returns distance in metres to the wall surface, or np.inf on miss.
-        Exits with a clear message if the wall is beyond FK max reach.
-
-        ray_dir_override: optional world-frame unit vec to use as ray direction.
-            When None, fires along EE local -Y (requires IK convergence).
-            Pass wall_normal directly from f2w_measure_phase to make measurement
-            independent of IK convergence state.
-        """
+        """Ray from EE toward the wall. Returns distance in metres, or np.inf on miss."""
         ee_bid  = ik.ee_bids[SWING_FOOT]
-        pos     = data.xpos[ee_bid].copy()        # ray origin: EE body centre
+        pos     = data.xpos[ee_bid].copy()
 
         if ray_dir_override is not None:
             ray_dir = np.array(ray_dir_override, float)
         else:
-            # Fall back to EE local -Y — only reliable after IK has converged
-            ee_rot  = data.xmat[ee_bid].reshape(3, 3)
-            ray_dir = -ee_rot[:, 1]
+            ray_dir = -data.xmat[ee_bid].reshape(3, 3)[:, 1]  # EE local -Y
         ray_dir /= np.linalg.norm(ray_dir)
 
-        # correct mj_ray signature: geomid is an output int32 array, returns float
         _geomid_out[0] = -1
         dist = mujoco.mj_ray(
             model, data, pos, ray_dir,
@@ -490,14 +391,9 @@ def main():
         hit_gid = int(_geomid_out[0])
 
         if dist < 0 or hit_gid != _wall_gid:
-            # TOCHECK: ray missed — wall may be behind EE or a chassis body is
-            # occluding it. Check robot spawn orientation and wall placement.
             print("[f2w] ⚠  Wall ray missed — check robot orientation / wall placement")
             return np.inf
 
-        # ── FK reachability check ───────────────────────────────────────
-        # Project where the ray hits the wall, then check if that point is
-        # within the FL leg's max reach from the hip pivot.
         wall_contact_pt = pos + dist * ray_dir
         hip_pos         = data.xanchor[hip_jid].copy()
         dist_from_hip   = np.linalg.norm(wall_contact_pt - hip_pos)
@@ -509,10 +405,9 @@ def main():
             print(f"[f2w]    EE → wall surface  : {dist * 1000:.1f} mm")
             print("[f2w]    → Move the robot spawn position closer to the wall and restart.")
             sys.exit(1)
-        # ───────────────────────────────────────────────────────────────
 
         return float(dist)
-    # ─────────────────────────────────────────────────────────────────────
+
     swing_mag_bid = mujoco.mj_name2id(
         model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{SWING_FOOT}")
     body_id = mujoco.mj_name2id(
@@ -562,7 +457,6 @@ def main():
                 ik.record_stance(data)
                 ee_home    = ik.ee_pos(data, SWING_FOOT).copy()
                 target_pos = ee_home.copy()
-                # Print EE local +X at settle so we know starting face direction
                 ee_x0 = data.xmat[ik.ee_bids[SWING_FOOT]].reshape(3, 3)[:, 0]
                 print(f"[diag] EE local +X at settle (world frame): {ee_x0.round(3)}")
                 runner.start(t, {
@@ -602,7 +496,7 @@ def main():
             phase_name, pct = runner.progress(t)
             bar = "█" * int(pct * BAR) + "░" * (BAR - int(pct * BAR))
 
-            actual  = ik.ee_pos(data, SWING_FOOT)
+            actual = ik.ee_pos(data, SWING_FOOT)
             if target_pos is not None:
                 diff    = (actual - target_pos) * 1000
                 pos_err = np.linalg.norm(diff)
@@ -724,16 +618,15 @@ def main():
                                     np.eye(3).flatten(), [1.0, 1.0, 0.2, 0.5])
                 scn.ngeom += 1
 
-        # EE local frame triad (X=red, Y=green, Z=blue); goal: local -Y → global +X
+        # EE local frame triad (X=red, Y=green, Z=blue)
         ee_bid  = ik.ee_bids[SWING_FOOT]
         ee_pos  = data.xpos[ee_bid].copy()
         ee_rot  = data.xmat[ee_bid].reshape(3, 3)
         ELEN, ERAD = 0.04, 0.002
-        for col, rgba in [(0, [1.,.2,.2,.9]),   # local X → red
-                          (1, [.2,1.,.2,.9]),   # local Y → green
-                          (2, [.2,.2,1.,.9])]:  # local Z → blue
+        for col, rgba in [(0, [1.,.2,.2,.9]),
+                          (1, [.2,1.,.2,.9]),
+                          (2, [.2,.2,1.,.9])]:
             axis = ee_rot[:, col]
-            # capsule frame: Z-axis of capsule must align with 'axis'
             cz = axis
             cx = np.array([1,0,0]) if abs(cz[0]) < 0.9 else np.array([0,1,0])
             cx = cx - np.dot(cx, cz) * cz; cx /= np.linalg.norm(cx)
