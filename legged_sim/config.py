@@ -34,6 +34,7 @@ TELEMETRY_INTERVAL = 0.5
 #     'max_force_per_wheel':   917.216,
 # }
 
+# Optimized params to avoid slipping
 PARAMS = {
     'ground_friction':       [0.054176, 0.181922, 7.4833e-06],
     'solref':                [0.00854906, 10.0],
@@ -62,9 +63,10 @@ DEMAGNETIZE_HOLD  = 0.10
 MAGNETIZE_HOLD    = 0.15
 
 # ── sequence selector ───────────────────────────────────────────────────
-# Options: "basic"   lift → swing → reach → drop
-#          "orient"  lift → swing → reach (EE face +X) → drop
-SEQUENCE = "orient"
+# Options: "basic"    lift → swing → reach → drop
+#          "orient"   lift → swing → hold (EE face -X)
+#          "f2w"      lift → swing → hold +20 cm (EE face +X, wall dist logged)
+SEQUENCE = "f2w"
 
 KNEE_GEOM_ZERO = {
     'FL': np.array([ 0.07280,  0.07280, -0.04432]),
