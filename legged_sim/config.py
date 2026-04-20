@@ -35,17 +35,17 @@ TELEMETRY_INTERVAL = 0.5
 # }
 
 # # Optimized params to avoid slipping
-# PARAMS = {
-#     'ground_friction':       [0.054176, 0.181922, 7.4833e-06],
-#     'solref':                [0.00854906, 10.0],
-#     'solimp':                [0.153179, 0.9999, 0.000654778, 0.417417, 3.69318],
-#     'noslip_iterations':     30,
-#     'noslip_tolerance':      7.13222e-05,
-#     'margin':                0.00388617,
-#     'Br':                    1.78509,
-#     'max_magnetic_distance': 0.0816543,
-#     'max_force_per_wheel':   803.941,
-# }
+PARAMS = {
+    'ground_friction':       [0.054176, 0.181922, 7.4833e-06],
+    'solref':                [0.00854906, 10.0],
+    'solimp':                [0.153179, 0.9999, 0.000654778, 0.417417, 3.69318],
+    'noslip_iterations':     30,
+    'noslip_tolerance':      7.13222e-05,
+    'margin':                0.00388617,
+    'Br':                    1.78509,
+    'max_magnetic_distance': 0.0816543,
+    'max_force_per_wheel':   803.941,
+}
 
 # # Hybrid opt. (floor + wall feet) config params (wallopt)
 # PARAMS = {
@@ -61,17 +61,17 @@ TELEMETRY_INTERVAL = 0.5
 # }
 
 # Full vert opt. config
-PARAMS = {
-    'ground_friction':       [0.43184, 0.0207983, 3.97933e-05],
-    'solref':                [0.00218585, 10.0],
-    'solimp':                [0.144504, 0.9999, 6.20682e-05, 0.349862, 3.76243],
-    'noslip_iterations':     30,
-    'noslip_tolerance':      2.18468e-06,
-    'margin':                0.00471799,
-    'Br':                    1.76703,
-    'max_magnetic_distance': 0.0739814,
-    'max_force_per_wheel':   1064.52,
-}
+# PARAMS = {
+#     'ground_friction':       [0.43184, 0.0207983, 3.97933e-05],
+#     'solref':                [0.00218585, 10.0],
+#     'solimp':                [0.144504, 0.9999, 6.20682e-05, 0.349862, 3.76243],
+#     'noslip_iterations':     30,
+#     'noslip_tolerance':      2.18468e-06,
+#     'margin':                0.00471799,
+#     'Br':                    1.76703,
+#     'max_magnetic_distance': 0.0739814,
+#     'max_force_per_wheel':   1064.52,
+# }
 
 JOINT_DAMPING  = 5.0
 JOINT_ARMATURE = 0.05
