@@ -1,0 +1,1 @@
+timestamp,elapsed_min,n_eval,id,cost,elapsed_min,x_drift_mm,y_drift_mm,z_drift_mm,x_cost,y_cost,z_cost,sliding_friction,torsional_friction,rolling_friction,solref_timeconst,solimp_dmin,solimp_width,solimp_midpoint,solimp_power,noslip_iterations,noslip_tolerance,margin,Br,max_magnetic_distance,max_force_per_wheel

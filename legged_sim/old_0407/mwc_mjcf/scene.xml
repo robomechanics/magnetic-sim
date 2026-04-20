@@ -1,0 +1,55 @@
+<mujoco model="climbing_robot_scene">
+
+  <compiler angle="degree" meshdir="assets" autolimits="true"/>
+
+  <option timestep="0.002" integrator="implicitfast" gravity="0 0 -9.81"/>
+
+  <visual>
+    <headlight diffuse="0.8 0.8 0.8" ambient="0.4 0.4 0.4" specular="0.2 0.2 0.2"/>
+    <map fogstart="1.5" fogend="4.0" znear="0.01" zfar="10.0"/>
+    <rgba haze="0.75 0.85 1.0 1"/>
+    <scale jointlength="1.5" jointwidth="0.01"/>
+  </visual>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.9 0.9 0.9" rgb2="0.7 0.7 0.7"/>
+    <material name="grid" texture="grid" texrepeat="5 5" reflectance="0.2"/>
+    <texture name="skybox" type="skybox" builtin="gradient"
+             rgb1="0.6 0.8 1.0" rgb2="1.0 1.0 1.0" width="512" height="3072"/>
+    <material name="steel" rgba="0.55 0.60 0.65 1" reflectance="0.4"/>
+  </asset>
+
+  <!-- Camera centred on midpoint of extended floor, looking toward wall corner -->
+  <statistic center="-1.0 0 0.4" extent="2.5"/>
+
+  <worldbody>
+    <site name="world_origin" pos="0 0 0" size="0.05" rgba="1 1 1 0"/>
+
+    <!-- Decorative background plane (no collision) — matches extended floor -->
+    <geom name="floor_vis" type="plane" size="2.0 1.5 0.01" material="grid"
+          pos="-1.0 0 -0.015" contype="0" conaffinity="0"/>
+
+    <!-- Magnetic floor: 3000x1000x10 mm steel plate; top face at Z=0
+         X extents: -2.5 → +0.5  (far edge flush with wall inner face at X=0.5)
+         Center shifted to X=-1.0 so size.x=1.5 spans the full 3 m -->
+    <geom name="floor" type="box"
+          pos="-1.0 0 -0.005" size="1.5 0.5 0.005"
+          condim="6" friction="0.8 0.005 0.0001"
+          contype="1" conaffinity="1"
+          material="steel"/>
+
+    <!-- Magnetic wall: 1000x1000x10 mm steel plate
+         inner face at X=0.500, outer face at X=0.510
+         axis-aligned — no euler needed for clean 90-deg floor-wall corner -->
+    <geom name="wall" type="box"
+          pos="0.505 0 0.5" size="0.005 0.5 0.5"
+          condim="6" friction="0.8 0.005 0.0001"
+          contype="1" conaffinity="1"
+          material="steel"/>
+
+  </worldbody>
+
+  <include file="robot.xml"/>
+
+</mujoco>

@@ -1,0 +1,39 @@
+{
+  "trial_id": 22,
+  "reward": -760.3143355956439,
+  "reward_hold": null,
+  "reward_drive": null,
+  "parameters": {
+    "Br": 1.5728060829971722,
+    "o_solref": [
+      0.00024443823683994244,
+      43.96420536966218
+    ],
+    "o_solimp": [
+      0.99,
+      0.99,
+      0.001,
+      0.5,
+      2.0
+    ],
+    "wheel_friction": [
+      0.9602848905241117,
+      0.08275605319956902,
+      0.09568453813536945
+    ],
+    "rocker_stiffness": 15.874337477016224,
+    "rocker_damping": 4.191442199396163,
+    "wheel_kp": 19.7089242183457,
+    "wheel_kv": 3.322901599396974,
+    "max_magnetic_distance": 0.019910401568149765,
+    "mode": "sideways",
+    "rollout_mode": "drive"
+  },
+  "config": {
+    "sim_duration": 5.0,
+    "settle_time": 1.0,
+    "fixed_torque": 0.5
+  },
+  "timestamp": "2026-01-25 16:16:36",
+  "experiment_name": "stage3_run1"
+}

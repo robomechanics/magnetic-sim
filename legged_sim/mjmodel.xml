@@ -1,0 +1,179 @@
+<mujoco model="climbing_robot_scene">
+  <compiler angle="radian" meshdir="assets/"/>
+
+  <option timestep="0.0005" noslip_tolerance="2.42366e-05" o_margin="0.00149908" o_solref="0.00192329 10" o_solimp="0.361806 0.9999 0.00065636 0.603088 3.97107" integrator="implicitfast" noslip_iterations="31"/>
+
+  <visual>
+    <headlight ambient="0.6 0.6 0.6" diffuse="1 1 1" specular="0.2 0.2 0.2"/>
+    <map fogstart="1.5" fogend="4" znear="0.001" zfar="10"/>
+    <scale jointlength="1.5" jointwidth="0.01"/>
+    <rgba haze="0.75 0.85 1 1"/>
+  </visual>
+
+  <statistic extent="2.5" center="-1 0 0.4"/>
+
+  <default>
+    <joint armature="0.01" damping="1"/>
+    <general biastype="affine" gainprm="100" biasprm="0 -100 -10"/>
+    <default class="cf_link">
+      <geom type="cylinder" density="1500" rgba="0.12 0.12 0.14 1"/>
+    </default>
+    <default class="visual">
+      <geom type="mesh" contype="0" conaffinity="0" group="2" rgba="0.2 0.4 0.9 0.4"/>
+    </default>
+    <default class="collision">
+      <geom condim="6" group="3" rgba="0 0 0 0"/>
+    </default>
+  </default>
+
+  <asset>
+    <texture type="2d" colorspace="auto" name="grid" builtin="checker" rgb1="0.9 0.9 0.9" rgb2="0.7 0.7 0.7" width="512" height="512"/>
+    <texture type="skybox" colorspace="auto" name="skybox" builtin="gradient" rgb1="0.6 0.8 1" rgb2="1 1 1" width="512" height="3072"/>
+    <material name="grid" texture="grid" texrepeat="5 5" reflectance="0.2"/>
+    <material name="steel" reflectance="0.4" rgba="0.55 0.6 0.65 1"/>
+    <mesh name="1103___pp___aws_pem_215lbs__eml63mm_24" file="1103___pp___aws_pem_215lbs__eml63mm_24.stl"/>
+  </asset>
+
+  <worldbody>
+    <geom name="floor_vis" size="2 1.5 0.01" pos="-1 0 -0.015" type="plane" contype="0" conaffinity="0" material="grid"/>
+    <geom name="floor" size="1.5 0.5 0.005" pos="-1 0 -0.005" type="box" condim="6" friction="0.130563 0.00256843 1.13878e-05" material="steel"/>
+    <geom name="wall" size="0.005 0.5 0.5" pos="0.505 0 0.5" type="box" condim="6" friction="0.130563 0.00256843 1.13878e-05" material="steel"/>
+    <site name="world_origin" pos="0 0 0" size="0.05" rgba="1 1 1 0"/>
+    <body name="main_frame" pos="-2 0 0.45">
+      <joint name="root" type="free" armature="0" damping="0"/>
+      <geom name="frame_geom" size="0.13 0.13 0.023" type="box" contype="0" conaffinity="0" density="7800" rgba="0.25 0.45 0.75 1"/>
+      <geom name="front_indicator" size="0.025 0.008 0.01" pos="0.138 0 0.033" type="box" contype="0" conaffinity="0" rgba="1 0.45 0 1"/>
+      <body name="hip_link_BL" pos="-0.0965 0.092 0.023">
+        <joint name="hip_pitch_BL" pos="0 0 0" axis="0 0 1" range="-1.5708 1.5708"/>
+        <geom name="hip_geom_BL" class="cf_link" size="0.015 0.0382247" pos="-0.01675 0.01675 0.03" quat="0.327999 0.667988 0.667988 0" rgba="0.1 0.3 1 1"/>
+        <body name="knee_link_BL" pos="-0.0335 0.0335 0.06">
+          <joint name="knee_BL" pos="0 0 0" axis="0.707107 0.707107 0" range="-0.785398 0.785398"/>
+          <geom name="knee_geom_BL" class="cf_link" size="0.015 0.0560445" pos="-0.0364 0.0364 -0.02216" quat="0.835284 0.38878 0.38878 0" rgba="0.1 0.3 1 1"/>
+          <body name="wrist_link_BL" pos="-0.0728 0.0728 -0.04432">
+            <joint name="wrist_BL" pos="0 0 0" axis="0.707107 0.707107 0" range="-1.1781 1.1781"/>
+            <geom name="wrist_geom_BL" class="cf_link" size="0.015 0.105003" pos="-0.037125 0.037125 -0.090935" quat="0.965924 0.183016 0.183016 0" rgba="0.1 0.3 1 1"/>
+            <body name="EE_BL" pos="-0.07425 0.07425 -0.18187" quat="0.707107 0 0.707107 0">
+              <joint name="ee_BL" pos="0 0 0" axis="0 0.707107 0.707107" range="-0.785398 0.785398"/>
+              <geom name="ee_link_geom_BL" class="cf_link" size="0.0115 0.033" pos="0.033 0 0" quat="0.707107 0 -0.707107 0" rgba="0.1 0.3 1 1"/>
+              <body name="electromagnet_BL" pos="0.066075 0 0" quat="-0.5 0.5 0.5 0.5">
+                <geom class="visual" rgba="0.9 0.1 0.1 0.35" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom class="collision" type="mesh" density="7900" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom size="0.002" pos="0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 -0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="hip_link_FL" pos="0.0965 0.092 0.023">
+        <joint name="hip_pitch_FL" pos="0 0 0" axis="0 0 1" range="-1.5708 1.5708"/>
+        <geom name="hip_geom_FL" class="cf_link" size="0.015 0.0382247" pos="0.01675 0.01675 0.03" quat="0.327999 0.667988 -0.667988 0" rgba="1 0.1 0.1 1"/>
+        <body name="knee_link_FL" pos="0.0335 0.0335 0.06">
+          <joint name="knee_FL" pos="0 0 0" axis="0.707107 -0.707107 0" range="-0.785398 0.785398"/>
+          <geom name="knee_geom_FL" class="cf_link" size="0.015 0.0560445" pos="0.0364 0.0364 -0.02216" quat="0.835284 0.38878 -0.38878 0" rgba="1 0.1 0.1 1"/>
+          <body name="wrist_link_FL" pos="0.0728 0.0728 -0.04432">
+            <joint name="wrist_FL" pos="0 0 0" axis="0.707107 -0.707107 0" range="-1.1781 1.1781"/>
+            <geom name="wrist_geom_FL" class="cf_link" size="0.015 0.105003" pos="0.037125 0.037125 -0.090935" quat="0.965924 0.183016 -0.183016 0" rgba="1 0.1 0.1 1"/>
+            <body name="EE_FL" pos="0.07425 0.07425 -0.18187" quat="0.707107 0 0.707107 0">
+              <joint name="ee_FL" pos="0 0 0" axis="0 -0.707107 0.707107" range="-0.785398 0.785398"/>
+              <geom name="ee_link_geom_FL" class="cf_link" size="0.0115 0.033" pos="0.033 0 0" quat="0.707107 0 -0.707107 0" rgba="1 0.1 0.1 1"/>
+              <body name="electromagnet_FL" pos="0.066075 0 0" quat="0.5 0.5 0.5 -0.5">
+                <geom class="visual" rgba="0.9 0.1 0.1 0.35" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom class="collision" type="mesh" density="7900" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom size="0.002" pos="0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 -0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="hip_link_BR" pos="-0.0965 -0.092 0.023">
+        <joint name="hip_pitch_BR" pos="0 0 0" axis="0 0 1" range="-1.5708 1.5708"/>
+        <geom name="hip_geom_BR" class="cf_link" size="0.015 0.0382247" pos="-0.01675 -0.01675 0.03" quat="0.327999 -0.667988 0.667988 0" rgba="0.1 0.1 0.1 1"/>
+        <body name="knee_link_BR" pos="-0.0335 -0.0335 0.06">
+          <joint name="knee_BR" pos="0 0 0" axis="-0.707107 0.707107 0" range="-0.785398 0.785398"/>
+          <geom name="knee_geom_BR" class="cf_link" size="0.015 0.0560445" pos="-0.0364 -0.0364 -0.02216" quat="0.835284 -0.38878 0.38878 0" rgba="0.1 0.1 0.1 1"/>
+          <body name="wrist_link_BR" pos="-0.0728 -0.0728 -0.04432">
+            <joint name="wrist_BR" pos="0 0 0" axis="-0.707107 0.707107 0" range="-1.1781 1.1781"/>
+            <geom name="wrist_geom_BR" class="cf_link" size="0.015 0.105003" pos="-0.037125 -0.037125 -0.090935" quat="0.965924 -0.183016 0.183016 0" rgba="0.1 0.1 0.1 1"/>
+            <body name="EE_BR" pos="-0.07425 -0.07425 -0.18187" quat="0.707107 0 0.707107 0">
+              <joint name="ee_BR" pos="0 0 0" axis="0 0.707107 -0.707107" range="-0.785398 0.785398"/>
+              <geom name="ee_link_geom_BR" class="cf_link" size="0.0115 0.033" pos="0.033 0 0" quat="0.707107 0 -0.707107 0" rgba="0.1 0.1 0.1 1"/>
+              <body name="electromagnet_BR" pos="0.066075 0 0" quat="0.5 0.5 0.5 -0.5">
+                <geom class="visual" rgba="0.9 0.1 0.1 0.35" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom class="collision" type="mesh" density="7900" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom size="0.002" pos="0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 -0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="hip_link_FR" pos="0.0965 -0.092 0.023">
+        <joint name="hip_pitch_FR" pos="0 0 0" axis="0 0 1" range="-1.5708 1.5708"/>
+        <geom name="hip_geom_FR" class="cf_link" size="0.015 0.0382247" pos="0.01675 -0.01675 0.03" quat="0.327999 -0.667988 -0.667988 0" rgba="0.1 0.8 0.1 1"/>
+        <body name="knee_link_FR" pos="0.0335 -0.0335 0.06">
+          <joint name="knee_FR" pos="0 0 0" axis="-0.707107 -0.707107 0" range="-0.785398 0.785398"/>
+          <geom name="knee_geom_FR" class="cf_link" size="0.015 0.0560445" pos="0.0364 -0.0364 -0.02216" quat="0.835284 -0.38878 -0.38878 0" rgba="0.1 0.8 0.1 1"/>
+          <body name="wrist_link_FR" pos="0.0728 -0.0728 -0.04432">
+            <joint name="wrist_FR" pos="0 0 0" axis="-0.707107 -0.707107 0" range="-1.1781 1.1781"/>
+            <geom name="wrist_geom_FR" class="cf_link" size="0.015 0.105003" pos="0.037125 -0.037125 -0.090935" quat="0.965924 -0.183016 -0.183016 0" rgba="0.1 0.8 0.1 1"/>
+            <body name="EE_FR" pos="0.07425 -0.07425 -0.18187" quat="0.707107 0 0.707107 0">
+              <joint name="ee_FR" pos="0 0 0" axis="0 -0.707107 -0.707107" range="-0.785398 0.785398"/>
+              <geom name="ee_link_geom_FR" class="cf_link" size="0.0115 0.033" pos="0.033 0 0" quat="0.707107 0 -0.707107 0" rgba="0.1 0.8 0.1 1"/>
+              <body name="electromagnet_FR" pos="0.066075 0 0" quat="-0.5 0.5 0.5 0.5">
+                <geom class="visual" rgba="0.9 0.1 0.1 0.35" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom class="collision" type="mesh" density="7900" mesh="1103___pp___aws_pem_215lbs__eml63mm_24"/>
+                <geom size="0.002" pos="0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.022 0.0125 0" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="-0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0 0.0125 -0.022" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+                <geom size="0.002" pos="0.015556 0.0125 -0.015556" contype="0" conaffinity="0" mass="1e-06" rgba="0 0 1 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <general name="hip_pitch_act_BL" joint="hip_pitch_BL" ctrlrange="-90 90"/>
+    <general name="knee_act_BL" joint="knee_BL" ctrlrange="-45 45"/>
+    <general name="wrist_act_BL" joint="wrist_BL" ctrlrange="-67.5 67.5"/>
+    <general name="hip_pitch_act_FL" joint="hip_pitch_FL" ctrlrange="-90 90"/>
+    <general name="knee_act_FL" joint="knee_FL" ctrlrange="-45 45"/>
+    <general name="wrist_act_FL" joint="wrist_FL" ctrlrange="-67.5 67.5"/>
+    <general name="hip_pitch_act_BR" joint="hip_pitch_BR" ctrlrange="-90 90"/>
+    <general name="knee_act_BR" joint="knee_BR" ctrlrange="-45 45"/>
+    <general name="wrist_act_BR" joint="wrist_BR" ctrlrange="-67.5 67.5"/>
+    <general name="hip_pitch_act_FR" joint="hip_pitch_FR" ctrlrange="-90 90"/>
+    <general name="knee_act_FR" joint="knee_FR" ctrlrange="-45 45"/>
+    <general name="wrist_act_FR" joint="wrist_FR" ctrlrange="-67.5 67.5"/>
+    <general name="ee_act_BL" joint="ee_BL" ctrlrange="-45 45"/>
+    <general name="ee_act_FL" joint="ee_FL" ctrlrange="-45 45"/>
+    <general name="ee_act_BR" joint="ee_BR" ctrlrange="-45 45"/>
+    <general name="ee_act_FR" joint="ee_FR" ctrlrange="-45 45"/>
+  </actuator>
+</mujoco>

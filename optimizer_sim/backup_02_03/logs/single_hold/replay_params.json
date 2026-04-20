@@ -1,0 +1,27 @@
+{
+  "trial_id": 23,
+  "reward": -0.03413191797298684,
+  "parameters": {
+    "Br": 1.4605729411531134,
+    "solref_timeconst": 0.0005355929876878867,
+    "solref_dampratio": 22.058451773375364,
+    "solimp_dmin": 0.9178243909430186,
+    "solimp_dmax": 0.9527783316225156,
+    "solimp_width": 0.003636305809194323,
+    "sliding_friction": 0.9255562547656192,
+    "torsional_friction": 0.04518499332769698,
+    "rolling_friction": 0.009163513675481391,
+    "rocker_stiffness": 50.56399239171735,
+    "rocker_damping": 1.1755284522716911,
+    "wheel_kp": 12.88887352851569,
+    "wheel_kv": 1.3831651183052838,
+    "max_magnetic_distance": 0.06428907022638972,
+    "noslip_iterations": 13.00034238824405
+  },
+  "config": {
+    "sim_duration": 5.0,
+    "settle_time": 1.0
+  },
+  "timestamp": "2026-02-03 13:58:58",
+  "experiment_name": "single_hold"
+}

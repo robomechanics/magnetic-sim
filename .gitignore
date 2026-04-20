@@ -1,2 +1,21 @@
 MUJOCO_LOG.TXT
 .env
+# Ignore Python virtual environments
+.venv/
+venv/
+env/
+*/.venv/
+*/venv/
+*/env/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore build outputs and temporary files
+*.log
+*.tmp
+*.swp
+.DS_Store

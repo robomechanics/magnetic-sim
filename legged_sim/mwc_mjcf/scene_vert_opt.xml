@@ -1,0 +1,64 @@
+<mujoco model="climbing_robot_scene_vert_opt">
+
+  <compiler angle="degree" meshdir="assets" autolimits="true"/>
+
+  <option timestep="0.002" integrator="implicitfast" gravity="0 0 -9.81"/>
+
+  <visual>
+    <headlight diffuse="0.8 0.8 0.8" ambient="0.4 0.4 0.4" specular="0.2 0.2 0.2"/>
+    <map fogstart="1.5" fogend="4.0" znear="0.01" zfar="10.0"/>
+    <rgba haze="0.75 0.85 1.0 1"/>
+    <scale jointlength="1.5" jointwidth="0.01"/>
+  </visual>
+
+  <asset>
+    <texture name="skybox" type="skybox" builtin="gradient"
+             rgb1="0.6 0.8 1.0" rgb2="1.0 1.0 1.0" width="512" height="3072"/>
+    <material name="steel" rgba="0.55 0.60 0.65 1" reflectance="0.4"/>
+  </asset>
+
+  <!-- Camera centred on the wall face where the robot is spawned -->
+  <statistic center="0.2 0 0.5" extent="1.0"/>
+
+  <worldbody>
+    <site name="world_origin" pos="0 0 0" size="0.05" rgba="1 1 1 0"/>
+
+    <!-- Magnetic floor: retained for geometry completeness but not used in this scenario -->
+    <geom name="floor" type="box"
+          pos="-1.0 0 -0.05" size="1.5 0.5 0.05"
+          condim="6" friction="0.8 0.005 0.0001"
+          contype="1" conaffinity="1"
+          material="steel"/>
+
+    <!-- Magnetic wall: 1000x1000x10 mm steel plate
+         inner face at X=0.500, outer face at X=0.510 -->
+    <geom name="wall" type="box"
+          pos="0.505 0 0.5" size="0.005 0.5 0.5"
+          condim="6" friction="0.8 0.005 0.0001"
+          contype="1" conaffinity="1"
+          material="steel"/>
+
+  </worldbody>
+
+  <include file="robot.xml"/>
+
+  <!--
+    Wall-spawn keyframe: robot positioned on the vertical wall face (X=0.500).
+    Rotation: +90° around Y-axis  [w=√2/2, x=0, y=√2/2, z=0]
+      • Body +Z (up in robot frame) → world -X  (pointing away from wall)
+      • Body -Z (feet direction)    → world +X  (toward wall) ✓
+    Position: body centre estimated ~0.15 m behind feet → X ≈ 0.35
+              mid-wall height → Z = 0.50,  centred laterally → Y = 0.
+    The 16 trailing zeros are revolute joint qpos placeholders;
+    sim_opt_sim.py overwrites them with KNEE/WRIST/EE_BAKE_DEG immediately
+    after loading this keyframe via mj_resetDataKeyframe.
+    ┌─ freejoint (7) ─────────────────────────────────────────┐  ┌─ joints (16) ──────────────────────────────────────────────┐
+       px    py  pz   qw        qx  qy        qz
+  -->
+  <keyframe>
+    <key name="wall_spawn"
+         qpos="0.26 0.0 0.50  0.7071068 0.0 -0.7071068 0.0
+               0 0 0 0  0 0 0 0  0 0 0 0  0 0 0 0"/>
+  </keyframe>
+
+</mujoco>
