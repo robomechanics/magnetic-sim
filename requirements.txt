@@ -1,8 +1,21 @@
-mujoco
-matplotlib
+# Core physics simulation
+mujoco>=3.0.0
+mink                  # Differential IK (FrameTask / SE3 targets) — legged_sim
+quadprog              # QP solver backend required by mink.solve_ik
+
+# Numerics & science
 numpy
 scipy
-pandas
+
+# Optimization
+cma                   # CMA-ES black-box optimizer — mwc_sim pull-off & wrench optimizers
+scikit-optimize       # Gaussian-process Bayesian optimizer — optimizer_sim
+
+# Visualization & plotting
+matplotlib
 opencv-python
+
+# Utilities
+pandas
 pyyaml
 tqdm
