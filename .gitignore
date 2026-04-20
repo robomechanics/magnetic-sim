@@ -1,5 +1,6 @@
 MUJOCO_LOG.TXT
 .env
+
 # Ignore Python virtual environments
 .venv/
 venv/
@@ -19,3 +20,19 @@ __pycache__/
 *.tmp
 *.swp
 .DS_Store
+
+# Optimizer output directories (pulloff_optimizer, wrench_optimizer)
+results/
+
+# Bayesian optimizer CSVs (tune_params.py)
+optimization_results_*.csv
+
+# CMA-ES checkpoint files
+*.pkl
+
+# Simulation plot outputs
+*.png
+
+# IDE
+.vscode/
+.idea/
