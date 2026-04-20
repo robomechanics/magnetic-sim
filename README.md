@@ -363,18 +363,4 @@ t= 8.2  [████████░░░░] FL/F2W_RE  72.3%  pos_err= 4.1mm 
 
 ---
 
-## Known Issues & Limitations
-
-- **Wall reachability check:** `sim.py` will call `sys.exit(1)` if the wall ray cast indicates the target contact point is outside the FK-computed maximum reach of the swing foot. Move the robot spawn position closer to the wall if this occurs.
-- **IK orientation locking:** The `_ori_target_rot` cache in `IKSolver` is reset between FL and FR phases (`ik._ori_target_rot = None` in `_start_runner_for`). If you add new sequences, ensure this reset is called when switching feet.
-- **`mwc_sim` XML assets:** The wrench and pull-off scenes reference `mwc_mjcf/` asset paths. Ensure you run these scripts from within the `mwc_sim/` directory or update `SCENE_XML` in the respective config files.
-- **`franka_test` submodule removed:** The `franka_test/` directory (which contained a `mujoco_menagerie` git submodule) has been removed from the main branch. If you need it, check the `MWC_steven` branch.
-- **Headless on WSL:** The passive viewer (`mujoco.viewer.launch_passive`) requires display forwarding under WSL. Use `--headless` for display-free environments.
-
----
-
-## Authors
-
-Nathan S. — CMU Robomechanics Lab, under Prof. Aaron M. Johnson.
-
 Research focus: contact-aware control, physics-consistent simulation, and locomotion planning for multi-surface magnetic wall-climbing robots.
