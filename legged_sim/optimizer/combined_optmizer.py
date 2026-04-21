@@ -423,15 +423,11 @@ if __name__ == "__main__":
         json.dump(best_params, f, indent=2)
     print(f"\nBest params saved to {params_json}")
 
-    # Launch floor viewer, then wall viewer sequentially
-    print("\nLaunching floor-lift viewer — close the window to continue to wall viewer.")
+    # Launch combined viewer (floor then wall), each followed by a per-leg
+    # magnetic-force plot.  viewer.py lives in the same directory as this file.
+    print("\nLaunching viewer — floor-lift first, then wall-hold.")
+    print("Close each MuJoCo window to advance; close the force-plot window to continue.")
     subprocess.run(
-        [sys.executable, os.path.join(_THIS_DIR, "sim_opt_sim.py"), "--view", params_json],
-        check=False,
-    )
-
-    print("Launching wall-hold viewer — close the window to exit.")
-    subprocess.run(
-        [sys.executable, os.path.join(_THIS_DIR, "sim_vertopt_sim.py"), "--view", params_json],
+        [sys.executable, os.path.join(_THIS_DIR, "viewer.py"), "--params", params_json, "--mode", "both"],
         check=False,
     )
