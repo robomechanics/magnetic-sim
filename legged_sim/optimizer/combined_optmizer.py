@@ -3,6 +3,11 @@ sim_combined_optimizer.py — CMA-ES optimizer over both floor-lift and wall-hol
 
 Combined cost = 0.5 * floor_lift_cost + 0.5 * wall_hold_cost
 
+Wall cost (from sim_vertopt_config):
+  50% X — pull-off from wall
+  50% Z — gravity-direction slip
+   0% Y — lateral slip (ignored)
+
 Usage:
     python sim_combined_optimizer.py
     python sim_combined_optimizer.py --n-calls 500 --suffix my_run
@@ -58,8 +63,11 @@ class OptResult(NamedTuple):
 def _csv_fieldnames() -> list[str]:
     base = [
         "id", "cost", "elapsed_min",
+        # Floor fields
         "floor_x_mm", "floor_y_mm", "floor_z_mm", "floor_cost",
-        "wall_x_mm",  "wall_y_mm",  "wall_z_mm",  "wall_cost",
+        # Wall fields — mirrored from sim_vertopt_optimizer
+        "wall_x_drift_mm", "wall_y_drift_mm", "wall_z_drift_mm",
+        "wall_x_cost", "wall_y_cost", "wall_z_cost", "wall_cost",
     ]
     return base + [dim.name for dim in space]
 
@@ -74,15 +82,15 @@ def _evaluate_one_candidate(args):
     point_index, point = args
 
     import os, sys
-    _dir = os.path.dirname(os.path.abspath(__file__))
+    _dir    = os.path.dirname(os.path.abspath(__file__))
     _legged = os.path.abspath(os.path.join(_dir, ".."))
     for p in (_legged, _dir):
         if p not in sys.path:
             sys.path.insert(0, p)
 
-    from sim_opt_sim      import run_headless_lift as floor_run
-    from sim_vertopt_sim  import run_headless_lift as wall_run
-    from sim_opt_config   import point_to_params, calculate_cost as floor_cost_fn
+    from sim_opt_sim       import run_headless_lift as floor_run
+    from sim_vertopt_sim   import run_headless_lift as wall_run
+    from sim_opt_config    import point_to_params, calculate_cost as floor_cost_fn
     from sim_vertopt_config import calculate_cost as wall_cost_fn
 
     params = point_to_params(point)
@@ -106,11 +114,16 @@ def _evaluate_one_candidate(args):
     total = COST_WEIGHT_FLOOR * fc["total_cost"] + COST_WEIGHT_WALL * wc["total_cost"]
 
     return point_index, {
-        "total_cost": total,
-        "floor_x":    fx, "floor_y": fy, "floor_z": fz,
-        "floor_cost": fc["total_cost"],
-        "wall_x":     wx, "wall_y":  wy, "wall_z":  wz,
-        "wall_cost":  wc["total_cost"],
+        "total_cost":    total,
+        # Floor
+        "floor_x":       fx, "floor_y": fy, "floor_z": fz,
+        "floor_cost":    fc["total_cost"],
+        # Wall — full breakdown matching sim_vertopt_optimizer
+        "wall_x":        wx, "wall_y":  wy, "wall_z":  wz,
+        "wall_x_cost":   wc["x_cost"],
+        "wall_y_cost":   wc["y_cost"],
+        "wall_z_cost":   wc["z_cost"],
+        "wall_cost":     wc["total_cost"],
     }, time.perf_counter() - t0
 
 
@@ -175,39 +188,52 @@ def _create_cmaes_optimizer(x0_override=None, es_override=None):
 
 def _build_result(point_index, point, cost_data, wall_time):
     return {
-        "id":         str(uuid.uuid4().hex)[:8],
-        "cost":       cost_data["total_cost"],
-        "params":     {dim.name: val for dim, val in zip(space, point)},
-        "wall_time":  wall_time,
-        "floor_x":    cost_data["floor_x"],
-        "floor_y":    cost_data["floor_y"],
-        "floor_z":    cost_data["floor_z"],
-        "floor_cost": cost_data["floor_cost"],
-        "wall_x":     cost_data["wall_x"],
-        "wall_y":     cost_data["wall_y"],
-        "wall_z":     cost_data["wall_z"],
-        "wall_cost":  cost_data["wall_cost"],
+        "id":            str(uuid.uuid4().hex)[:8],
+        "cost":          cost_data["total_cost"],
+        "params":        {dim.name: val for dim, val in zip(space, point)},
+        "wall_time":     wall_time,
+        # Floor
+        "floor_x":       cost_data["floor_x"],
+        "floor_y":       cost_data["floor_y"],
+        "floor_z":       cost_data["floor_z"],
+        "floor_cost":    cost_data["floor_cost"],
+        # Wall — full breakdown
+        "wall_x":        cost_data["wall_x"],
+        "wall_y":        cost_data["wall_y"],
+        "wall_z":        cost_data["wall_z"],
+        "wall_x_cost":   cost_data["wall_x_cost"],
+        "wall_y_cost":   cost_data["wall_y_cost"],
+        "wall_z_cost":   cost_data["wall_z_cost"],
+        "wall_cost":     cost_data["wall_cost"],
     }
 
 
 def _append_csv(path, fields, res, elapsed_min, extra=None):
     row = {
-        "id":          res["id"],
-        "cost":        res["cost"],
-        "elapsed_min": f"{elapsed_min:.1f}",
-        "floor_x_mm":  res["floor_x"] * 1000,
-        "floor_y_mm":  res["floor_y"] * 1000,
-        "floor_z_mm":  res["floor_z"] * 1000,
-        "floor_cost":  res["floor_cost"],
-        "wall_x_mm":   res["wall_x"] * 1000,
-        "wall_y_mm":   res["wall_y"] * 1000,
-        "wall_z_mm":   res["wall_z"] * 1000,
-        "wall_cost":   res["wall_cost"],
+        "id":            res["id"],
+        "cost":          res["cost"],
+        "elapsed_min":   f"{elapsed_min:.1f}",
+        # Floor
+        "floor_x_mm":    res["floor_x"] * 1000,
+        "floor_y_mm":    res["floor_y"] * 1000,
+        "floor_z_mm":    res["floor_z"] * 1000,
+        "floor_cost":    res["floor_cost"],
+        # Wall
+        "wall_x_drift_mm": res["wall_x"] * 1000,
+        "wall_y_drift_mm": res["wall_y"] * 1000,
+        "wall_z_drift_mm": res["wall_z"] * 1000,
+        "wall_x_cost":   res["wall_x_cost"],
+        "wall_y_cost":   res["wall_y_cost"],
+        "wall_z_cost":   res["wall_z_cost"],
+        "wall_cost":     res["wall_cost"],
         **(extra or {}),
     }
     row.update(res["params"])
-    with open(path, "a", newline="") as f:
-        csv.DictWriter(f, fieldnames=fields).writerow(row)
+    try:
+        with open(path, "a", newline="") as f:
+            csv.DictWriter(f, fieldnames=fields).writerow(row)
+    except Exception as e:
+        print(f"  [Warning] Could not append to CSV: {e}")
 
 
 # ── Printing ──────────────────────────────────────────────────────────────────
@@ -232,8 +258,11 @@ def _print_best(all_results, n_done, elapsed_min, best_csv_path):
     marker = " ★ NEW BEST" if is_new else ""
     print(
         f"  Best (n={n_done}): cost={best['cost']:.6f}{marker}\n"
-        f"    floor: x={best['floor_x']*1000:.2f}mm  y={best['floor_y']*1000:.2f}mm  z={best['floor_z']*1000:.2f}mm  cost={best['floor_cost']:.4f}\n"
-        f"    wall:  x={best['wall_x']*1000:.2f}mm   y={best['wall_y']*1000:.2f}mm   z={best['wall_z']*1000:.2f}mm   cost={best['wall_cost']:.4f}"
+        f"    floor: x={best['floor_x']*1000:.2f}mm  y={best['floor_y']*1000:.2f}mm  "
+        f"z={best['floor_z']*1000:.2f}mm  cost={best['floor_cost']:.4f}\n"
+        f"    wall:  x={best['wall_x']*1000:.2f}mm  y={best['wall_y']*1000:.2f}mm  "
+        f"z={best['wall_z']*1000:.2f}mm  cost={best['wall_cost']:.4f}  "
+        f"(x_cost={best['wall_x_cost']:.4f}  y_cost={best['wall_y_cost']:.4f}  z_cost={best['wall_z_cost']:.4f})"
     )
     if is_new:
         _best_cost_so_far = best["cost"]
@@ -249,8 +278,11 @@ def _run_optimization(all_results, pool, run_dir, csv_path, best_csv_path,
                       n_calls, es_resume=None, x0_override=None):
     ask, tell, es = _create_cmaes_optimizer(x0_override=x0_override, es_override=es_resume)
 
-    warm = "RESUMED" if es_resume else ("warm-start" if x0_override else "cold-start")
-    print(f"  Backend: CMA-ES ({warm}, sigma={es.sigma:.4g}, popsize={BATCH_SIZE})")
+    if es_resume is not None:
+        print(f"  Backend: CMA-ES RESUMED (sigma={es.sigma:.4g}, popsize={BATCH_SIZE})")
+    else:
+        warm = "warm-start" if x0_override is not None else "cold-start"
+        print(f"  Backend: CMA-ES (sigma0={CMAES_SIGMA0}, popsize={BATCH_SIZE}, {warm})")
 
     n_done    = 0
     batch_num = 0
@@ -311,14 +343,20 @@ if __name__ == "__main__":
     if args.resume_from:
         p = pathlib.Path(args.resume_from)
         if p.is_dir(): p = p / "cmaes_state.pkl"
+        if not p.exists():
+            sys.exit(f"ERROR: resume state not found: {p}")
         state     = pickle.load(open(p, "rb"))
         es_resume = state["es"]
-        print(f"Resuming (sigma={es_resume.sigma:.4g}, prev evals={state['n_done']})")
+        print(f"Resuming from {p} (sigma={es_resume.sigma:.4g}, prev evals={state['n_done']})")
 
     if args.warm_start_from:
         p    = pathlib.Path(args.warm_start_from)
         if p.is_dir(): p = p / "optimization_bests.csv"
+        if not p.exists():
+            sys.exit(f"ERROR: warm-start file not found: {p}")
         rows = list(csv.DictReader(open(p)))
+        if not rows:
+            sys.exit(f"ERROR: warm-start file is empty: {p}")
         x0_override = {dim.name: float(rows[-1][dim.name]) for dim in space}
         print(f"Warm-starting from {p} (cost={rows[-1]['cost']})")
 
@@ -337,6 +375,7 @@ if __name__ == "__main__":
 
     print(f"\nCombined optimizer: {n_calls} evals, batch={BATCH_SIZE}")
     print(f"Floor lift weight: {COST_WEIGHT_FLOOR}  |  Wall hold weight: {COST_WEIGHT_WALL}")
+    print(f"Wall cost: 50% X-drift (pull-off) + 50% Z-drift (gravity slip) + 0% Y-drift (ignored)")
     print(f"Run directory: {run_dir}/")
 
     try:
@@ -384,7 +423,7 @@ if __name__ == "__main__":
         json.dump(best_params, f, indent=2)
     print(f"\nBest params saved to {params_json}")
 
-    # Launch floor viewer, then wall viewer sequentially (close one → next opens)
+    # Launch floor viewer, then wall viewer sequentially
     print("\nLaunching floor-lift viewer — close the window to continue to wall viewer.")
     subprocess.run(
         [sys.executable, os.path.join(_THIS_DIR, "sim_opt_sim.py"), "--view", params_json],
