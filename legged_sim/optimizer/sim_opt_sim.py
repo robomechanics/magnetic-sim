@@ -360,10 +360,135 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
     return float(xy_arr.mean(axis=0)[0]), float(xy_arr.mean(axis=0)[1]), float(z_arr.mean())
 
 
+# ── Interactive viewer ────────────────────────────────────────────────────────
+
+_key_state = {"paused": True, "step_once": False}
+
+def _key_callback(keycode):
+    if keycode in (32, 257):   # SPACE or ENTER — toggle pause
+        _key_state["paused"] = not _key_state["paused"]
+    elif keycode == 262:        # RIGHT ARROW — step one frame
+        _key_state["step_once"] = True
+
+
+def run_with_viewer(params: dict) -> None:
+    """
+    Re-run the floor lift scenario with a live MuJoCo viewer.
+
+    Controls:
+      SPACE / ENTER — pause / resume
+      RIGHT ARROW   — step one physics frame while paused
+    """
+    import time
+    import mujoco.viewer as mjviewer
+
+    _key_state["paused"]    = True
+    _key_state["step_once"] = False
+
+    model, data, plate_ids, magnet_ids, sphere_gids = _setup_model(params)
+
+    swing_mag_bid = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{SWING_FOOT}")
+    STANCE_FEET = [f for f in FEET if f != SWING_FOOT]
+    stance_ee_bids = {
+        foot: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{foot}")
+        for foot in STANCE_FEET
+    }
+
+    ik  = _IK(model)
+    pid = _PID(model)
+
+    ctrl_targets = np.zeros(model.nu)
+    for i in range(model.nu):
+        jid = model.actuator_trnid[i, 0]
+        ctrl_targets[i] = data.qpos[model.jnt_qposadr[jid]]
+
+    settled           = False
+    z_settle_baseline = {}
+    xy_lift_baseline  = {}
+    target_pos        = np.zeros(3)
+    ik_step_counter   = 0
+
+    total_time    = SETTLE_TIME + LIFT_HOLD
+    measure_start = SETTLE_TIME + LIFT_MEASURE_START
+
+    print("Viewer ready — press SPACE to start, RIGHT ARROW to step while paused.")
+
+    with mjviewer.launch_passive(model, data, key_callback=_key_callback) as viewer:
+        viewer.cam.lookat[:] = [0.0, 0.0, 0.1]
+        viewer.cam.distance  = 1.2
+        viewer.cam.elevation = -20
+        viewer.cam.azimuth   = 45
+
+        step_start = time.perf_counter()
+
+        while viewer.is_running():
+            if _key_state["paused"] and not _key_state["step_once"]:
+                viewer.sync()
+                time.sleep(0.02)
+                continue
+            _key_state["step_once"] = False
+
+            if data.time < SETTLE_TIME:
+                data.xfrc_applied[:] = 0
+                _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
+                data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
+                mujoco.mj_step(model, data)
+
+            elif data.time < total_time:
+                if not settled:
+                    settled = True
+                    ik.record_stance(data)
+                    ee_home    = ik.ee_pos(data, SWING_FOOT).copy()
+                    target_pos = ee_home + np.array([0.0, 0.0, LIFT_DZ])
+                    for foot, bid in stance_ee_bids.items():
+                        pos = data.xpos[bid].copy()
+                        z_settle_baseline[foot] = pos[2]
+                        xy_lift_baseline[foot]  = pos[:2].copy()
+
+                data.xfrc_applied[:] = 0
+                _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids,
+                           params, off_mids={swing_mag_bid})
+
+                ik_step_counter += 1
+                if ik_step_counter >= IK_EVERY_N:
+                    ik_step_counter = 0
+                    ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP)
+
+                data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
+                mujoco.mj_step(model, data)
+
+            viewer.sync()
+            elapsed   = time.perf_counter() - step_start
+            remaining = TIMESTEP - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
+            step_start = time.perf_counter()
+
+
 if __name__ == "__main__":
     import sys
+    import argparse
+    import json
+
     sys.path.insert(0, os.path.dirname(__file__))
-    from sim_opt_config import PARAMS
-    print("Running single trial with default PARAMS...")
-    x, y, z = run_headless_lift(PARAMS)
-    print(f"mean drift — x: {x*1000:.2f}mm  y: {y*1000:.2f}mm  z: {z*1000:.2f}mm")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--view", metavar="PARAMS_JSON",
+                        help="Launch viewer using params from this JSON file")
+    args = parser.parse_args()
+
+    if args.view:
+        with open(args.view) as f:
+            params = json.load(f)
+        params['ground_friction']   = list(params['ground_friction'])
+        params['solref']            = list(params['solref'])
+        params['solimp']            = list(params['solimp'])
+        params['noslip_iterations'] = int(params['noslip_iterations'])
+        print(f"Launching floor-lift viewer with params from {args.view}")
+        run_with_viewer(params)
+    else:
+        from sim_opt_config import PARAMS
+        print("Running single trial with default PARAMS...")
+        x, y, z = run_headless_lift(PARAMS)
+        print(f"mean drift — x: {x*1000:.2f}mm  y: {y*1000:.2f}mm  z: {z*1000:.2f}mm")

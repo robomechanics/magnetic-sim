@@ -32,7 +32,7 @@ space: list = [
     Real(0.0,   0.005, "uniform",     name="margin"),
     Real(0.5,   2.0,   "log-uniform", name="Br"),
     Real(0.012, 0.1,   "log-uniform", name="max_magnetic_distance"),
-    Real(800.0, 1100,  "log-uniform", name="max_force_per_wheel"),
+    Real(800.0, 1500,  "log-uniform", name="max_force_per_wheel"),
 ]
 
 # ── Default / warm-start params ───────────────────────────────────────────────

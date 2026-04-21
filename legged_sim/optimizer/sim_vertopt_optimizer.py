@@ -36,7 +36,7 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
-from sim_opt_config import (
+from sim_vertopt_config import (
     N_CALLS,
     BATCH_SIZE,
     CMAES_SIGMA0,
@@ -87,7 +87,7 @@ def _evaluate_one_candidate(args):
         sys.path.insert(0, _optimizer_dir)
 
     from sim_vertopt_sim import run_headless_lift
-    from sim_opt_config import point_to_params, calculate_cost
+    from sim_vertopt_config import point_to_params, calculate_cost
 
     params = point_to_params(point)
 
@@ -376,13 +376,13 @@ if __name__ == "__main__":
         run_tag += f"_{args.suffix}"
     run_dir  = pathlib.Path("results") / run_tag
     run_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(pathlib.Path(__file__).parent / "sim_opt_config.py", run_dir / "sim_opt_config.py")
+    shutil.copy2(pathlib.Path(__file__).parent / "sim_vertopt_config.py", run_dir / "sim_vertopt_config.py")
 
     csv_path      = str(run_dir / "optimization_results.csv")
     best_csv_path = str(run_dir / "optimization_bests.csv")
 
     print(f"\nSim vert optimizer: {n_calls} evals, batch={BATCH_SIZE}")
-    print(f"Cost: 50% Z-drift (gravity slip) + 25% X-drift (pull-off) + 25% Y-drift (lateral)")
+    print(f"Cost: 50% X-drift (wall penetration) + 50% Z-drift (gravity slip) + 0% Y-drift (ignored)")
     print(f"Run directory: {run_dir}/")
 
     with open(csv_path,      "w", newline="") as f:

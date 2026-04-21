@@ -16,7 +16,7 @@ Slip metric (returned as mean_abs_x/y/z, lower = better):
   Z — mean absolute vertical drift of all 4 EE bodies (gravity-direction
       slip; most critical for wall climbing).
 
-These feed directly into calculate_cost() in sim_opt_config.py:
+These feed directly into calculate_cost() in sim_vertopt_config.py:
   total = 0.50 * Z  +  0.25 * X  +  0.25 * Y
 """
 
@@ -178,17 +178,16 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
     """
     Spawn on wall, all magnets ON throughout, hold joint positions.
 
-    Phases:
-      1. Settle (0 → SETTLE_TIME): all magnets ON, PID holds bake pose.
-      2. Hold   (SETTLE_TIME → total):
-            same control; sample EE drift from settle-end snapshot.
+    Baseline is captured at t=0 (spawn pose after mj_forward) so the full
+    drop during the settle transient is included in the cost — not hidden.
+    Sampling runs from the very first step through to total_time.
 
     Returns:
         (mean_abs_x, mean_abs_y, mean_abs_z)
-          X — mean |X drift| of all 4 EE bodies (pull-off direction).
-          Y — mean |Y drift| of all 4 EE bodies (lateral slip).
-          Z — mean |Z drift| of all 4 EE bodies (gravity-direction slip).
-        All sampled over [SETTLE_TIME + HOLD_MEASURE_START, total_time].
+          X — mean |X drift| of all 4 EE bodies (wall penetration / pull-off).
+          Y — mean |Y drift| of all 4 EE bodies (lateral slip, not penalised).
+          Z — mean |Z drift| of all 4 EE bodies (gravity-direction drop).
+        Sampled over every timestep from t=0 to total_time.
     """
     model, data, plate_ids, magnet_ids, sphere_gids = _setup_model(params)
 
@@ -207,40 +206,33 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
         jid = model.actuator_trnid[i, 0]
         ctrl_targets[i] = data.qpos[model.jnt_qposadr[jid]]
 
-    settled        = False
-    ee_baseline    = {}   # foot -> XYZ position at end of settle
-    xyz_samples    = []   # list of arrays shape (4, 3), one per timestep sampled
+    # Baseline at spawn — capture before any physics steps.
+    ee_baseline = {
+        foot: data.xpos[bid].copy()
+        for foot, bid in ee_bids.items()
+    }
 
-    total_time    = SETTLE_TIME + HOLD_TIME
-    measure_start = SETTLE_TIME + HOLD_MEASURE_START
+    xyz_samples = []   # list of arrays shape (4, 3), one per timestep
+    total_time  = SETTLE_TIME + HOLD_TIME
 
     while data.time < total_time:
-        t = data.time
-
         # All magnets ON for the entire simulation.
         data.xfrc_applied[:] = 0
         _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
         mujoco.mj_step(model, data)
 
-        # ── One-time snapshot at end of settle ────────────────────────────────
-        if not settled and data.time >= SETTLE_TIME:
-            settled = True
-            for foot, bid in ee_bids.items():
-                ee_baseline[foot] = data.xpos[bid].copy()
-
-        # ── Sample drift during hold window ───────────────────────────────────
-        if settled and data.time >= measure_start:
-            drift = np.array([
-                np.abs(data.xpos[bid] - ee_baseline[foot])
-                for foot, bid in ee_bids.items()
-            ])  # shape (4, 3)
-            xyz_samples.append(drift)
+        # Sample drift from spawn position every step.
+        drift = np.array([
+            np.abs(data.xpos[bid] - ee_baseline[foot])
+            for foot, bid in ee_bids.items()
+        ])  # shape (4, 3)
+        xyz_samples.append(drift)
 
     if not xyz_samples:
         return 0.0, 0.0, 0.0
 
-    arr = np.array(xyz_samples)         # shape (N, 4, 3)
+    arr = np.array(xyz_samples)            # shape (N, 4, 3)
     mean_per_axis = arr.mean(axis=(0, 1))  # shape (3,)  mean over time and feet
     return float(mean_per_axis[0]), float(mean_per_axis[1]), float(mean_per_axis[2])
 
@@ -287,12 +279,14 @@ def run_with_viewer(params: dict) -> None:
         jid = model.actuator_trnid[i, 0]
         ctrl_targets[i] = data.qpos[model.jnt_qposadr[jid]]
 
-    settled        = False
-    ee_baseline    = {}
-    xyz_samples    = []
-
-    total_time    = SETTLE_TIME + HOLD_TIME
-    measure_start = SETTLE_TIME + HOLD_MEASURE_START
+    # Baseline at spawn — before any physics steps.
+    ee_baseline = {
+        foot: data.xpos[mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{foot}")].copy()
+        for foot in FEET
+    }
+    xyz_samples = []
+    total_time  = SETTLE_TIME + HOLD_TIME
 
     print("Viewer ready — press SPACE to start, RIGHT ARROW to step while paused.")
 
@@ -319,17 +313,12 @@ def run_with_viewer(params: dict) -> None:
                 data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
                 mujoco.mj_step(model, data)
 
-                if not settled and data.time >= SETTLE_TIME:
-                    settled = True
-                    for foot, bid in ee_bids.items():
-                        ee_baseline[foot] = data.xpos[bid].copy()
-
-                if settled and data.time >= measure_start:
-                    drift = np.array([
-                        np.abs(data.xpos[bid] - ee_baseline[foot])
-                        for foot, bid in ee_bids.items()
-                    ])
-                    xyz_samples.append(drift)
+                # Sample drift from spawn position every step.
+                drift = np.array([
+                    np.abs(data.xpos[bid] - ee_baseline[foot])
+                    for foot, bid in ee_bids.items()
+                ])
+                xyz_samples.append(drift)
 
             viewer.sync()
 
@@ -370,7 +359,7 @@ if __name__ == "__main__":
         print(f"Launching viewer with params from {args.view}")
         run_with_viewer(params)
     else:
-        from sim_opt_config import PARAMS
+        from sim_vertopt_config import PARAMS
         print("Running single wall-hold trial with default PARAMS...")
         x, y, z = run_headless_lift(PARAMS)
         print(f"mean drift — x: {x*1000:.2f}mm  y: {y*1000:.2f}mm  z: {z*1000:.2f}mm")
