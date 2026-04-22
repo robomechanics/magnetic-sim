@@ -1,12 +1,16 @@
 """
-sim_combined_optimizer.py — CMA-ES optimizer over both floor-lift and wall-hold sims.
+sim_combined_optimizer.py — CMA-ES optimizer over floor-lift, wall-hold, and pull-off sims.
 
-Combined cost = 0.5 * floor_lift_cost + 0.5 * wall_hold_cost
+Combined cost = 0.4 * floor_lift_cost + 0.4 * wall_hold_cost + 0.2 * pulloff_cost
 
 Wall cost (from sim_vertopt_config):
   50% X — pull-off from wall
   50% Z — gravity-direction slip
    0% Y — lateral slip (ignored)
+
+Pull-off cost (from sim_pulloff_sim):
+  One-sided shortfall below PULLOFF_TARGET (N), normalised to [0, 1].
+  Cost = 0 when pull-off force ≥ target; cost = 1 when force = 0.
 
 Usage:
     python sim_combined_optimizer.py
@@ -48,9 +52,10 @@ from sim_vertopt_config import (
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 
-COST_WEIGHT_FLOOR = 0.5
-COST_WEIGHT_WALL  = 0.5
-COST_FAILURE      = 9999.0
+COST_WEIGHT_FLOOR   = 0.4
+COST_WEIGHT_WALL    = 0.4
+COST_WEIGHT_PULLOFF = 0.2
+COST_FAILURE        = 9999.0
 
 
 class OptResult(NamedTuple):
@@ -68,6 +73,8 @@ def _csv_fieldnames() -> list[str]:
         # Wall fields — mirrored from sim_vertopt_optimizer
         "wall_x_drift_mm", "wall_y_drift_mm", "wall_z_drift_mm",
         "wall_x_cost", "wall_y_cost", "wall_z_cost", "wall_cost",
+        # Pull-off fields
+        "pulloff_force_n", "pulloff_target_n", "pulloff_shortfall_n", "pulloff_cost",
     ]
     return base + [dim.name for dim in space]
 
@@ -90,6 +97,7 @@ def _evaluate_one_candidate(args):
 
     from sim_opt_sim       import run_headless_lift as floor_run
     from sim_vertopt_sim   import run_headless_lift as wall_run
+    from sim_pulloff_sim   import run_headless_lift as pulloff_run, calculate_cost as pulloff_cost_fn
     from sim_opt_config    import point_to_params, calculate_cost as floor_cost_fn
     from sim_vertopt_config import calculate_cost as wall_cost_fn
 
@@ -108,22 +116,36 @@ def _evaluate_one_candidate(args):
         print(f"  [WARN] wall sim crashed (point {point_index}): {e}", flush=True)
         wx = wy = wz = 0.0
 
+    try:
+        pf = pulloff_run(params)
+    except Exception as e:
+        print(f"  [WARN] pulloff sim crashed (point {point_index}): {e}", flush=True)
+        pf = 0.0
+
     fc = floor_cost_fn(fx, fy, fz)
     wc = wall_cost_fn(wx, wy, wz)
+    pc = pulloff_cost_fn(pf, params['max_force_per_wheel'])
 
-    total = COST_WEIGHT_FLOOR * fc["total_cost"] + COST_WEIGHT_WALL * wc["total_cost"]
+    total = (COST_WEIGHT_FLOOR   * fc["total_cost"]
+           + COST_WEIGHT_WALL    * wc["total_cost"]
+           + COST_WEIGHT_PULLOFF * pc["total_cost"])
 
     return point_index, {
-        "total_cost":    total,
+        "total_cost":        total,
         # Floor
-        "floor_x":       fx, "floor_y": fy, "floor_z": fz,
-        "floor_cost":    fc["total_cost"],
+        "floor_x":           fx, "floor_y": fy, "floor_z": fz,
+        "floor_cost":        fc["total_cost"],
         # Wall — full breakdown matching sim_vertopt_optimizer
-        "wall_x":        wx, "wall_y":  wy, "wall_z":  wz,
-        "wall_x_cost":   wc["x_cost"],
-        "wall_y_cost":   wc["y_cost"],
-        "wall_z_cost":   wc["z_cost"],
-        "wall_cost":     wc["total_cost"],
+        "wall_x":            wx, "wall_y":  wy, "wall_z":  wz,
+        "wall_x_cost":       wc["x_cost"],
+        "wall_y_cost":       wc["y_cost"],
+        "wall_z_cost":       wc["z_cost"],
+        "wall_cost":         wc["total_cost"],
+        # Pull-off
+        "pulloff_force":     pf,
+        "pulloff_target":    pc["pulloff_target"],
+        "pulloff_shortfall": pc["shortfall_n"],
+        "pulloff_cost":      pc["total_cost"],
     }, time.perf_counter() - t0
 
 
@@ -188,23 +210,28 @@ def _create_cmaes_optimizer(x0_override=None, es_override=None):
 
 def _build_result(point_index, point, cost_data, wall_time):
     return {
-        "id":            str(uuid.uuid4().hex)[:8],
-        "cost":          cost_data["total_cost"],
-        "params":        {dim.name: val for dim, val in zip(space, point)},
-        "wall_time":     wall_time,
+        "id":              str(uuid.uuid4().hex)[:8],
+        "cost":            cost_data["total_cost"],
+        "params":          {dim.name: val for dim, val in zip(space, point)},
+        "wall_time":       wall_time,
         # Floor
-        "floor_x":       cost_data["floor_x"],
-        "floor_y":       cost_data["floor_y"],
-        "floor_z":       cost_data["floor_z"],
-        "floor_cost":    cost_data["floor_cost"],
+        "floor_x":         cost_data["floor_x"],
+        "floor_y":         cost_data["floor_y"],
+        "floor_z":         cost_data["floor_z"],
+        "floor_cost":      cost_data["floor_cost"],
         # Wall — full breakdown
-        "wall_x":        cost_data["wall_x"],
-        "wall_y":        cost_data["wall_y"],
-        "wall_z":        cost_data["wall_z"],
-        "wall_x_cost":   cost_data["wall_x_cost"],
-        "wall_y_cost":   cost_data["wall_y_cost"],
-        "wall_z_cost":   cost_data["wall_z_cost"],
-        "wall_cost":     cost_data["wall_cost"],
+        "wall_x":          cost_data["wall_x"],
+        "wall_y":          cost_data["wall_y"],
+        "wall_z":          cost_data["wall_z"],
+        "wall_x_cost":     cost_data["wall_x_cost"],
+        "wall_y_cost":     cost_data["wall_y_cost"],
+        "wall_z_cost":     cost_data["wall_z_cost"],
+        "wall_cost":       cost_data["wall_cost"],
+        # Pull-off
+        "pulloff_force":     cost_data["pulloff_force"],
+        "pulloff_target":    cost_data["pulloff_target"],
+        "pulloff_shortfall": cost_data["pulloff_shortfall"],
+        "pulloff_cost":      cost_data["pulloff_cost"],
     }
 
 
@@ -226,6 +253,11 @@ def _append_csv(path, fields, res, elapsed_min, extra=None):
         "wall_y_cost":   res["wall_y_cost"],
         "wall_z_cost":   res["wall_z_cost"],
         "wall_cost":     res["wall_cost"],
+        # Pull-off
+        "pulloff_force_n":     res["pulloff_force"],
+        "pulloff_target_n":    res["pulloff_target"],
+        "pulloff_shortfall_n": res["pulloff_shortfall"],
+        "pulloff_cost":        res["pulloff_cost"],
         **(extra or {}),
     }
     row.update(res["params"])
@@ -247,6 +279,7 @@ def _print_batch(results):
             f"    [{i+1}/{len(results)}] id={r['id']}  cost={r['cost']:.6f}  "
             f"floor(x={r['floor_x']*1000:+.2f} y={r['floor_y']*1000:+.2f} z={r['floor_z']*1000:+.2f})mm  "
             f"wall(x={r['wall_x']*1000:+.2f} y={r['wall_y']*1000:+.2f} z={r['wall_z']*1000:+.2f})mm  "
+            f"pulloff={r['pulloff_force']:.1f}N  "
             f"t={r['wall_time']:.1f}s"
         )
 
@@ -262,7 +295,9 @@ def _print_best(all_results, n_done, elapsed_min, best_csv_path):
         f"z={best['floor_z']*1000:.2f}mm  cost={best['floor_cost']:.4f}\n"
         f"    wall:  x={best['wall_x']*1000:.2f}mm  y={best['wall_y']*1000:.2f}mm  "
         f"z={best['wall_z']*1000:.2f}mm  cost={best['wall_cost']:.4f}  "
-        f"(x_cost={best['wall_x_cost']:.4f}  y_cost={best['wall_y_cost']:.4f}  z_cost={best['wall_z_cost']:.4f})"
+        f"(x_cost={best['wall_x_cost']:.4f}  y_cost={best['wall_y_cost']:.4f}  z_cost={best['wall_z_cost']:.4f})\n"
+        f"    pulloff: force={best['pulloff_force']:.1f}N  target={best['pulloff_target']:.1f}N  "
+        f"shortfall={best['pulloff_shortfall']:.1f}N  cost={best['pulloff_cost']:.4f}"
     )
     if is_new:
         _best_cost_so_far = best["cost"]
@@ -363,7 +398,7 @@ if __name__ == "__main__":
     run_tag = datetime.now().strftime("%Y%m%dT%H%M%S") + (f"_{args.suffix}" if args.suffix else "")
     run_dir = pathlib.Path("results") / run_tag
     run_dir.mkdir(parents=True, exist_ok=True)
-    for cfg in ("sim_opt_config.py", "sim_vertopt_config.py"):
+    for cfg in ("sim_opt_config.py", "sim_vertopt_config.py", "sim_pulloff_sim.py"):
         shutil.copy2(pathlib.Path(__file__).parent / cfg, run_dir / cfg)
 
     csv_path      = str(run_dir / "optimization_results.csv")
@@ -374,8 +409,9 @@ if __name__ == "__main__":
             csv.DictWriter(f, fieldnames=fields).writeheader()
 
     print(f"\nCombined optimizer: {n_calls} evals, batch={BATCH_SIZE}")
-    print(f"Floor lift weight: {COST_WEIGHT_FLOOR}  |  Wall hold weight: {COST_WEIGHT_WALL}")
+    print(f"Floor lift weight: {COST_WEIGHT_FLOOR}  |  Wall hold weight: {COST_WEIGHT_WALL}  |  Pull-off weight: {COST_WEIGHT_PULLOFF}")
     print(f"Wall cost: 50% X-drift (pull-off) + 50% Z-drift (gravity slip) + 0% Y-drift (ignored)")
+    print(f"Pull-off cost: one-sided shortfall below params['max_force_per_wheel'] (dynamic per candidate), normalised to [0, 1]")
     print(f"Run directory: {run_dir}/")
 
     try:
@@ -428,6 +464,6 @@ if __name__ == "__main__":
     print("\nLaunching viewer — floor-lift first, then wall-hold.")
     print("Close each MuJoCo window to advance; close the force-plot window to continue.")
     subprocess.run(
-        [sys.executable, os.path.join(_THIS_DIR, "viewer.py"), "--params", params_json, "--mode", "both"],
+        [sys.executable, os.path.join(_THIS_DIR, "viewer.py"), "--params", params_json, "--mode", "all"],
         check=False,
     )

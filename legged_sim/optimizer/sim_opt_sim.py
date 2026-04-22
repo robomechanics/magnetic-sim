@@ -7,7 +7,7 @@ Runs:
   [spin and drop phases are commented out / not executed]
 
 Returns mean absolute body XYZ drift during the lift hold, relative to the
-body position recorded at settle time.
+body position recorded at the end of the settle phase.
 """
 
 import os
@@ -26,10 +26,11 @@ if LEGGED_DIR not in sys.path:
     sys.path.insert(0, LEGGED_DIR)
 
 from config import (
-    MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES,
+    MAGNET_BODY_NAMES,
     TIMESTEP,
     KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
 )
+from sim_pulloff_config import MU_0, MAGNET_VOLUME  # single source of truth for magnet physics
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,9 +51,10 @@ PID_KD      = 30.0
 PID_I_CLAMP = 100.0
 # ── Magnetic force ────────────────────────────────────────────────────────────
 
-def _mag_force(dist: float, Br: float) -> float:
+def _mag_force(dist: float, Br: float, f_cap: float = np.inf) -> float:
     m = (Br * MAGNET_VOLUME) / MU_0
-    return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * dist) ** 4)
+    f = (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * dist) ** 4)
+    return min(f, f_cap)  # cap per-sphere before accumulation to prevent float overflow
 def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids=None):
     if off_mids is None:
         off_mids = set()
@@ -61,6 +63,8 @@ def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids
         if mid in off_mids:
             continue
         fvec = np.zeros(3)
+        n_spheres = len(sphere_gids[mid])
+        per_sphere_cap = params['max_force_per_wheel'] / max(n_spheres, 1)
         for gid in sphere_gids[mid]:
             best_dist, best_fromto = np.inf, None
             for pid in plate_ids:
@@ -73,7 +77,7 @@ def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids
             norm = np.linalg.norm(n)
             if norm < 1e-10:
                 continue
-            fvec += _mag_force(best_dist, params['Br']) * (n / norm)
+            fvec += _mag_force(best_dist, params['Br'], per_sphere_cap) * (n / norm)
         total_mag = np.linalg.norm(fvec)
         if total_mag > params['max_force_per_wheel']:
             fvec *= params['max_force_per_wheel'] / total_mag
@@ -247,22 +251,18 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
     Run settle + lift-only phase with the given params.
 
     Phases executed:
-      1. Settle  (0 → SETTLE_TIME): all magnets ON, PID hold
+      1. Settle  (0 → SETTLE_TIME): all magnets ON, PID hold — not sampled.
       2. Lift    (SETTLE_TIME → SETTLE_TIME + LIFT_HOLD): FL lifted LIFT_DZ,
-                  FL magnet OFF, stance magnets ON
+                  FL magnet OFF, stance magnets ON — sampled after LIFT_MEASURE_START.
       [spin and drop phases are NOT executed]
 
     Returns:
         (mean_abs_x, mean_abs_y, mean_abs_z) where:
           XY — mean absolute lateral drift of FR/BL/BR electromagnets,
-               sampled over [SETTLE_TIME+LIFT_MEASURE_START, total_time],
-               relative to their XY positions at lift-start.
+               sampled over [SETTLE_TIME + LIFT_MEASURE_START, total_time].
+               Baseline is the post-settle EE position (end of settle phase).
           Z  — mean absolute Z deviation of FR/BL/BR electromagnets over
-               the same window, relative to their Z at END of settle
-               (4 feet down, all magnets ON). Captures penetration change
-               from redistributed magnetic load when FL lifts off.
-               Sampling starts after LIFT_MEASURE_START to skip the
-               foot-travel transient (foot still rising toward target).
+               the same window, relative to post-settle position.
     """
     model, data, plate_ids, magnet_ids, sphere_gids = _setup_model(params)
 
@@ -286,15 +286,15 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
         ctrl_targets[i] = data.qpos[model.jnt_qposadr[jid]]
 
     settled           = False
-    z_settle_baseline = {}  # foot -> Z at END of settle (4 feet down, all magnets ON)
-    xy_lift_baseline  = {}  # foot -> XY at moment FL magnet turns OFF
+    z_settle_baseline = {}  # foot -> Z at t=0 (initial state before any forces)
+    xy_lift_baseline  = {}  # foot -> XY at t=0 (initial state before any forces)
     target_pos        = np.zeros(3)
     ik_step_counter   = 0
     xy_drift_samples  = []
     z_drift_samples   = []
 
-    total_time    = SETTLE_TIME + LIFT_HOLD
-    measure_start = SETTLE_TIME + LIFT_MEASURE_START  # skip foot-travel transient
+    total_time         = SETTLE_TIME + LIFT_HOLD
+    lift_measure_start = SETTLE_TIME + LIFT_MEASURE_START  # skip foot-travel transient in lift phase only
 
     while data.time < total_time:
         t = data.time
@@ -308,8 +308,6 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
             continue
 
         # ── One-time snapshot at end of settle ────────────────────────────────
-        # Taken before FL magnet turns OFF so Z baseline reflects 4-foot
-        # magnetic configuration (full penetration at rest).
         if not settled:
             settled = True
             ik.record_stance(data)
@@ -317,7 +315,7 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
             target_pos = ee_home + np.array([0.0, 0.0, LIFT_DZ])
             for foot, bid in stance_ee_bids.items():
                 pos = data.xpos[bid].copy()
-                z_settle_baseline[foot] = pos[2]   # Z with 4 feet + all magnets
+                z_settle_baseline[foot] = pos[2]
                 xy_lift_baseline[foot]  = pos[:2].copy()
 
         # ── Phase 2: lift hold (FL magnet OFF, stance magnets ON) ─────────────
@@ -333,19 +331,18 @@ def run_headless_lift(params: dict) -> tuple[float, float, float]:
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
         mujoco.mj_step(model, data)
 
-        # Only sample after foot has had time to reach lifted position
-        if data.time < measure_start:
+        # Skip foot-travel transient in lift phase only
+        if data.time < lift_measure_start:
             continue
 
-        # Z: how much do stance feet deviate from their settle-phase Z?
-        #    Captures penetration change caused by redistributed magnetic load.
+        # Z: deviation from post-settle baseline — captures load redistribution when FL lifts off.
         z_drifts = np.array([
             abs(data.xpos[bid][2] - z_settle_baseline[foot])
             for foot, bid in stance_ee_bids.items()
         ])
         z_drift_samples.append(z_drifts.mean())
 
-        # XY: lateral drift of stance feet from lift-start position
+        # XY: lateral drift from post-settle baseline — captures slip during lift phase.
         xy_drifts = np.array([
             np.abs(data.xpos[bid][:2] - xy_lift_baseline[foot])
             for foot, bid in stance_ee_bids.items()
