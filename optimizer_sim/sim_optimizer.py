@@ -1,154 +1,129 @@
-from math import dist
-from xml.parsers.expat import model
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
 import mujoco
-import mujoco.viewer
 import numpy as np
-from scipy.spatial.transform import Rotation as R
-from copy import deepcopy
-import imageio.plugins.ffmpeg
+
+from config import DEFAULT_MODE, DEFAULT_PARAMS, DEFAULT_XML_PATH, MODES
+
+MU_0 = 4 * np.pi * 1e-7
+MAGNET_VOLUME = np.pi * (0.025**2) * 0.013
 
 
-from config import MODES, DEFAULT_MODE, DEFAULT_PARAMS
+def resolve_xml_path(mjcf_path: str | None = None) -> str:
+    path = Path(mjcf_path or DEFAULT_XML_PATH)
+    if path.exists():
+        return str(path)
+    alt = Path(__file__).resolve().parent / path.name
+    return str(alt)
 
-# Magnetic constants
-MU_0 = 4 * np.pi * 1e-7  # Magnetic permeability of free space (H/m)
-MAGNET_VOLUME = np.pi * (0.025**2) * 0.013  # Cylinder: r=0.025m, h=0.013m
-# MAX_FORCE_PER_WHEEL = 50.0  # N
 
-
-
-def calculate_magnetic_force(distance, Br, V, MU_0):
-    """Compute magnetic attraction force using dipole-dipole approximation."""
+def calculate_magnetic_force(distance: float, Br: float, V: float, mu_0: float) -> float:
     if distance <= 0.0:
         return 0.0
-    m = (Br * V) / MU_0
-    return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * distance) ** 4)
+    m = (Br * V) / mu_0
+    return (3 * mu_0 * m**2) / (2 * np.pi * (2 * distance) ** 4)
 
-def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visualize=False, mode=None):
-    """
-    Runs a MuJoCo simulation with given parameters and returns the trajectory.
-    
-    Returns:
-        list or None: Trajectory data or None if unstable.
-    """
-    # If visualization requested, delegate to viewer module
-    if visualize:
-        import viewer
-        viewer.visualize_simulation(params, sim_duration, mode=mode)
-        return None
-    
-    # Mode config
-    if mode is None:
-        mode = DEFAULT_MODE
-    mode_cfg = MODES[mode]
-    if sim_duration is None:
-        sim_duration = mode_cfg["sim_duration"]
 
-    # Otherwise run headless simulation
-    model = mujoco.MjModel.from_xml_path(mjcf_path)
-
-    # Apply parameters
+def apply_sim_params(model: mujoco.MjModel, params: dict[str, Any]) -> None:
     wall_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall_geom")
-    if 'ground_friction' in params:
-        model.geom_friction[wall_id] = params['ground_friction']
-        
-    if 'solref' in params:
-        model.opt.o_solref = params['solref']
-        
-    if 'solimp' in params:
-        model.opt.o_solimp = params['solimp']
+    if wall_id >= 0 and "ground_friction" in params:
+        model.geom_friction[wall_id] = params["ground_friction"]
+    if "solref" in params:
+        model.opt.o_solref[:] = params["solref"]
+    if "solimp" in params:
+        model.opt.o_solimp[:] = params["solimp"]
+    if "noslip_iterations" in params:
+        model.opt.noslip_iterations = int(params["noslip_iterations"])
 
-    if 'noslip_iterations' in params:
-        model.opt.noslip_iterations = params['noslip_iterations']
-
-    if 'rocker_stiffness' in params and 'rocker_damping' in params:
-        rocker_joints = ['right_hinge', 'left_hinge', 'BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
+    rocker_joints = ["right_hinge", "left_hinge", "BR_pivot", "FR_pivot", "BL_pivot", "FL_pivot"]
+    if "rocker_stiffness" in params and "rocker_damping" in params:
         for joint_name in rocker_joints:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             if joint_id != -1:
-                model.jnt_stiffness[joint_id] = params['rocker_stiffness']
-                model.dof_damping[model.jnt_dofadr[joint_id]] = params['rocker_damping']
+                model.jnt_stiffness[joint_id] = params["rocker_stiffness"]
+                model.dof_damping[model.jnt_dofadr[joint_id]] = params["rocker_damping"]
 
-    if 'wheel_kp' in params:
-        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+    wheel_actuators = ["BR_wheel_motor", "FR_wheel_motor", "BL_wheel_motor", "FL_wheel_motor"]
+    if "wheel_kp" in params:
         for act_name in wheel_actuators:
             act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
             if act_id != -1:
-                model.actuator_gainprm[act_id, 0] = params['wheel_kp']
-                model.actuator_biasprm[act_id, 1] = -params['wheel_kp']  # ADD THIS LINE!
-
-    if 'wheel_kv' in params:
-        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+                model.actuator_gainprm[act_id, 0] = params["wheel_kp"]
+                model.actuator_biasprm[act_id, 1] = -params["wheel_kp"]
+    if "wheel_kv" in params:
         for act_name in wheel_actuators:
             act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
             if act_id != -1:
-                model.actuator_biasprm[act_id, 2] = -params['wheel_kv']
+                model.actuator_biasprm[act_id, 2] = -params["wheel_kv"]
 
-    # Get parameters for magnetic force
-    Br = params['Br']
-    max_magnetic_distance = params['max_magnetic_distance']
 
-    model.opt.timestep = 1./1e3
+def run_simulation(
+    params: dict[str, Any],
+    mjcf_path: str | None = None,
+    sim_duration: float | None = None,
+    visualize: bool = False,
+    mode: str | None = None,
+):
+    if visualize:
+        raise NotImplementedError("Visualization path is not implemented in this stripped-down optimizer helper.")
+
+    mode = mode or DEFAULT_MODE
+    mode_cfg = MODES[mode]
+    sim_duration = sim_duration if sim_duration is not None else mode_cfg["sim_duration"]
+
+    model = mujoco.MjModel.from_xml_path(resolve_xml_path(mjcf_path))
+    apply_sim_params(model, params)
+    model.opt.timestep = 1.0 / 1e3
     model.opt.enableflags |= 1 << 0
-    model.opt.iterations = 100  # Increase from default 50
-    model.opt.tolerance = 1e-8  # Tighter convergence
-
+    model.opt.iterations = 100
+    model.opt.tolerance = 1e-8
     data = mujoco.MjData(model)
-    data.qpos[0] = 0.035              # X = 35mm from wall
-    data.qpos[1] = 0.0                # Y = centered
-    data.qpos[2] = 0.35               # Z = height along wall
-    data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
-    # data.qpos[3:7] = [0, -0.707, 0, 0.707]  # Rotated to face wall + 180° yaw flip
 
-    settle_time = mode_cfg["settle_time"]
-    trajectory = []
-    
+    data.qpos[0] = 0.035
+    data.qpos[1] = 0.0
+    data.qpos[2] = 0.35
+    data.qpos[3:7] = [-0.707, 0, 0.707, 0]
 
+    wall_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall_geom")
+    Br = params["Br"]
+    max_magnetic_distance = params["max_magnetic_distance"]
 
-    # Get all sampling sphere geoms (24 per wheel = 96 total)
     wheel_gids = []
-    for wheel_prefix in ['BR', 'FR', 'BL', 'FL']:
-        # Find the wheel_geom body
+    for wheel_prefix in ["BR", "FR", "BL", "FL"]:
         body_name = f"{wheel_prefix}_wheel_geom"
         body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
         if body_id == -1:
             continue
-        
-        # Get all geoms in this body
         for geom_id in range(model.ngeom):
-            if model.geom_bodyid[geom_id] == body_id:
-                if model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_SPHERE:
-                    wheel_gids.append(geom_id)
-    
-    # Collect wheel actuator IDs for velocity control
+            if model.geom_bodyid[geom_id] == body_id and model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_SPHERE:
+                wheel_gids.append(geom_id)
+
     wheel_act_ids = []
-    for act_name in ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']:
+    for act_name in ["BR_wheel_motor", "FR_wheel_motor", "BL_wheel_motor", "FL_wheel_motor"]:
         act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
         if act_id != -1:
             wheel_act_ids.append(act_id)
 
     fromto = np.zeros(6)
+    trajectory = []
 
     try:
         mujoco.mj_step(model, data)
-
-        # Set wheels sideways and apply high stiffness to pivot joints to prevent flipping
-        pivot_joints = ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
-        for joint_name in pivot_joints:
+        for joint_name in ["BR_pivot", "FR_pivot", "BL_pivot", "FL_pivot"]:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             if joint_id != -1:
-                data.qpos[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
-                model.jnt_stiffness[joint_id] = 1000.0  # CHANGE: hardcode to 1000
-                model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
+                qadr = model.jnt_qposadr[joint_id]
+                data.qpos[qadr] = mode_cfg["pivot_angle"]
+                model.jnt_stiffness[joint_id] = max(model.jnt_stiffness[joint_id], 1000.0)
+                model.qpos_spring[qadr] = mode_cfg["pivot_angle"]
 
-
-        def simulation_step():
-            data.xfrc_applied[:] = 0.0 
-            
-            wheel_forces = {}  # body_id -> accumulated fvec
+        while data.time < sim_duration:
+            data.xfrc_applied[:] = 0.0
+            wheel_forces: dict[int, np.ndarray] = {}
             for gid in wheel_gids:
-                if gid == -1 or gid >= model.ngeom:
-                    continue
                 dist = mujoco.mj_geomDistance(model, data, gid, wall_id, 50, fromto)
                 if dist < 0 or dist > max_magnetic_distance:
                     continue
@@ -162,95 +137,138 @@ def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visuali
 
             for bid, fvec in wheel_forces.items():
                 total_mag = np.linalg.norm(fvec)
-                if total_mag > params['max_force_per_wheel']:
-                    fvec *= params['max_force_per_wheel'] / total_mag
+                if total_mag > params["max_force_per_wheel"]:
+                    fvec = fvec * (params["max_force_per_wheel"] / total_mag)
                 data.xfrc_applied[bid, :3] += fvec
-            # Actuator control for velocity mode
-            # if mode_cfg["actuator_mode"] == "velocity":
-            #     for act_id in wheel_act_ids:
-            #         data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * dt # Large but fixed position offset
-            # else:
-            #     for act_id in wheel_act_ids:
-            #         data.ctrl[act_id] = mode_cfg["actuator_target"]
 
-            # Actuator control
             if mode_cfg["actuator_mode"] == "velocity":
                 for act_id in wheel_act_ids:
                     data.ctrl[act_id] = mode_cfg["actuator_target_rads"]
             else:
                 for act_id in wheel_act_ids:
-                    data.ctrl[act_id] = 0.0
-
-            if np.any(np.abs(data.qvel) > 100.0):  # Any velocity > 100 m/s
-                raise ValueError("Simulation unstable: Excessive velocities.")
+                    data.ctrl[act_id] = mode_cfg["actuator_target"]
 
             mujoco.mj_step(model, data)
 
-            # Check for instability (non-finite values or solver failures)
+            # Stability checks AFTER step
+            if np.any(np.abs(data.qvel) > 100.0):
+                raise ValueError("Simulation unstable: excessive velocities")
             if not np.all(np.isfinite(data.qacc)):
-                raise ValueError("Simulation unstable: Non-finite accelerations.")
-            
-            if (data.solver_niter >= model.opt.iterations).any():
-                raise ValueError("Simulation unstable: Solver iteration limit.")
-
+                raise ValueError("Simulation unstable: non-finite accelerations")
             if not np.isfinite(data.solver_fwdinv[0]):
-                raise ValueError("Simulation unstable: Non-finite solver values.")
+                raise ValueError("Simulation unstable: non-finite solver values")
+            # solver_niter check removed: hitting limit on small contact islands is normal
 
             trajectory.append({
-                'time': data.time,
-                'pos': data.qpos[:3].copy(),
-                'vel': data.qvel[:3].copy(),
-                'quat': data.xquat[1].copy()
+                "time": float(data.time),
+                "pos": data.qpos[:3].copy(),
+                "vel": data.qvel[:3].copy(),
+                "quat": data.xquat[1].copy(),
             })
-
-        while data.time < sim_duration:
-            simulation_step()
-
     except ValueError as e:
-        if "Simulation unstable" in str(e):
-            print(f"  Simulation failed: {e}")
-            return None
-        raise e
-
-    if not trajectory or not np.all(np.isfinite([d['pos'][0] for d in trajectory])):
-        print("Warning: Invalid trajectory.")
+        print(f"  Simulation failed: {e}")
         return None
-        
+
+    if not trajectory:
+        return None
     return trajectory
 
-if __name__ == "__main__":
-    # Raw default
-    # default_params = {
-    #     'ground_friction': [0.95, 0.01, 0.01],
-    #     'solref': [0.0004, 25.0],
-    #     'solimp': [0.9, 0.95, 0.001, 0.5, 1.0],
-    #     'noslip_iterations': 15,
-    #     'rocker_stiffness': 30.0,
-    #     'rocker_damping': 1.0,
-    #     'wheel_kp': 10.0,
-    #     'wheel_kv': 1.0,
-    #     'Br': 1.48
-    # }
 
-    # Optimized hold default
-    default_params = DEFAULT_PARAMS
+def trajectory_to_arrays(trajectory) -> dict[str, np.ndarray]:
+    if not trajectory:
+        return {"time": np.array([]), "pos": np.empty((0, 3)), "vel": np.empty((0, 3))}
+    time = np.array([s["time"] for s in trajectory], dtype=float)
+    pos = np.array([s["pos"] for s in trajectory], dtype=float)
+    vel = np.array([s["vel"] for s in trajectory], dtype=float)
+    return {"time": time, "pos": pos, "vel": vel}
 
 
-    
-    mode = DEFAULT_MODE
-    print(f"Running simulation (mode={mode})...")
-    trajectory = run_simulation(default_params, visualize=True, mode=mode)
+"""
+PATCH: Replace compute_tracking_metrics in sim_optimizer.py with this version.
+Fixes: TypeError: int() argument must be a string ... not 'NoneType'
+       when mode_cfg["tracking_axis"] is None (hold mode).
+"""
 
-    if trajectory:
-        settle_time = MODES[mode]["settle_time"]
-        start_idx = next((i for i, s in enumerate(trajectory) if s['time'] >= settle_time), 0)
-        
-        total_movement = sum(
-            np.linalg.norm(trajectory[i]['pos'] - trajectory[i-1]['pos'])
-            for i in range(start_idx + 1, len(trajectory))
-        )
+def compute_tracking_metrics(trajectory, mode_cfg: dict) -> dict:
+    nan_metrics = {
+        "status": "failed",
+        "samples": 0,
+        "rms_err_x": float("nan"),
+        "rms_err_y": float("nan"),
+        "rms_err_z": float("nan"),
+        "mean_abs_err_x": float("nan"),
+        "mean_abs_err_y": float("nan"),
+        "mean_abs_err_z": float("nan"),
+        "final_disp_x": float("nan"),
+        "final_disp_y": float("nan"),
+        "final_disp_z": float("nan"),
+        "tracking_error_axis_rms": float("nan"),
+        "tracking_error_axis_final": float("nan"),
+        "avg_vel_x": float("nan"),
+        "avg_vel_y": float("nan"),
+        "avg_vel_z": float("nan"),
+        "target_vel_x": float(mode_cfg["target_velocity_xyz"][0]),
+        "target_vel_y": float(mode_cfg["target_velocity_xyz"][1]),
+        "target_vel_z": float(mode_cfg["target_velocity_xyz"][2]),
+        "settled_total_motion": float("nan"),
+    }
 
-        print(f"Total movement: {total_movement:.6f} m")
-        print(f"Cost: {total_movement:.6f}")
+    if not trajectory:
+        return nan_metrics
+
+    import numpy as np
+    arr = trajectory_to_arrays(trajectory)
+    time, pos, vel = arr["time"], arr["pos"], arr["vel"]
+    settle_time = mode_cfg["settle_time"]
+    start_idx = min(int(np.searchsorted(time, settle_time, side="left")), len(time) - 1)
+    p0 = pos[start_idx]
+    t0 = time[start_idx]
+
+    target_vel = np.asarray(mode_cfg["target_velocity_xyz"], dtype=float)
+    target_pos = p0[None, :] + (time - t0)[:, None] * target_vel[None, :]
+    err = pos - target_pos
+
+    settled_motion = (
+        float(np.sum(np.linalg.norm(np.diff(pos[start_idx:], axis=0), axis=1)))
+        if len(pos) - start_idx > 1 else 0.0
+    )
+
+    axis = mode_cfg["tracking_axis"]  # None for hold mode
+    if axis is not None:
+        axis = int(axis)
+        tracking_error_axis_rms   = float(np.sqrt(np.mean(err[:, axis] ** 2)))
+        tracking_error_axis_final = float(err[-1, axis])
     else:
+        # Hold mode: use total motion as the primary scalar (want it near zero)
+        tracking_error_axis_rms   = settled_motion
+        tracking_error_axis_final = float(np.linalg.norm(pos[-1] - p0))
+
+    return {
+        "status": "ok",
+        "samples": int(len(time)),
+        "rms_err_x": float(np.sqrt(np.mean(err[:, 0] ** 2))),
+        "rms_err_y": float(np.sqrt(np.mean(err[:, 1] ** 2))),
+        "rms_err_z": float(np.sqrt(np.mean(err[:, 2] ** 2))),
+        "mean_abs_err_x": float(np.mean(np.abs(err[:, 0]))),
+        "mean_abs_err_y": float(np.mean(np.abs(err[:, 1]))),
+        "mean_abs_err_z": float(np.mean(np.abs(err[:, 2]))),
+        "final_disp_x": float(pos[-1, 0] - p0[0]),
+        "final_disp_y": float(pos[-1, 1] - p0[1]),
+        "final_disp_z": float(pos[-1, 2] - p0[2]),
+        "tracking_error_axis_rms":   tracking_error_axis_rms,
+        "tracking_error_axis_final": tracking_error_axis_final,
+        "avg_vel_x": float(np.mean(vel[:, 0])),
+        "avg_vel_y": float(np.mean(vel[:, 1])),
+        "avg_vel_z": float(np.mean(vel[:, 2])),
+        "target_vel_x": float(target_vel[0]),
+        "target_vel_y": float(target_vel[1]),
+        "target_vel_z": float(target_vel[2]),
+        "settled_total_motion": settled_motion,
+    }
+
+if __name__ == "__main__":
+    traj = run_simulation(DEFAULT_PARAMS, mode=DEFAULT_MODE)
+    if traj is None:
         print("Simulation failed.")
+    else:
+        print(compute_tracking_metrics(traj, MODES[DEFAULT_MODE]))

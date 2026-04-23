@@ -1,103 +1,95 @@
 """
-config.py - Mode configuration for Sally magnetic wall-climbing robot.
-
-Modes:
-    hold  - Wheels stationary, optimize for minimum slip (wall adhesion)
-    drive - Wheels spinning, optimize for sideways driving performance
+config.py - Mode configuration and optimization settings for Sally magnetic wall-climbing simulation.
 """
 
+from __future__ import annotations
+
 import numpy as np
-from skopt.space import Real, Integer
+from skopt.space import Integer, Real
 
 # DEFAULT_MODE = "hold"
-# DEFAULT_MODE = "drive_sideways"
-DEFAULT_MODE = "drive_up"
+# DEFAULT_MODE = "drive_up"
+DEFAULT_MODE = "drive_sideways"
+DEFAULT_XML_PATH = "XML/scene.xml"
+RESULTS_DIR = "results"
 
-N_CALLS = 20
+# Optimization settings
+N_CALLS = 160
+BATCH_SIZE = 8
+CMAES_SIGMA0 = 0.35
+OPTIMIZER_RANDOM_STATE = 42
+COST_FAILURE = 1e6
 WHEEL_RADIUS = 0.025
 
 MODES = {
     "hold": {
-        # this means we will set a constant position target (0) for the wheel joints to hold them in place
-        # not actuator type 
-        "actuator_mode": "position", 
+        "actuator_mode": "position",
         "actuator_target": 0.0,
         "cost_function": "minimize_slip",
         "sim_duration": 5.0,
         "settle_time": 0.2,
-        "pivot_angle": 0.0,            # 0 - wheels sideways
+        "pivot_angle": 0.0,
+        "target_velocity_xyz": np.array([0.0, 0.0, 0.0]),  # no motion target — hold still
+        "tracking_axis": None,                              # no primary axis for hold mode
     },
     "drive_sideways": {
-        # velocity is a position ramp
-        # produces approximately constant velocity behavior, because the PD controller is always “chasing” a moving angle target.
         "actuator_mode": "velocity",
         "actuator_target_ms": 1.0,
-        "cost_function": "drive_side",
+        "cost_function": "drive",
         "sim_duration": 10.0,
         "settle_time": 0.2,
-        "pivot_angle": 0.0,            # np.pi/2 - wheels sideways
+        "pivot_angle": 0.0,
+        "target_velocity_xyz": np.array([0.0, 1.0, 0.0]),  # +Y at 1 m/s
+        "tracking_axis": 1,                                 # Y is the primary axis
     },
     "drive_up": {
         "actuator_mode": "velocity",
         "actuator_target_ms": 1.0,
-        "cost_function": "drive_up",
+        "cost_function": "drive",
         "sim_duration": 10.0,
         "settle_time": 0.2,
-        "pivot_angle": -1.5708,              # wheels forward (drive up)
+        "pivot_angle": -1.5708,
+        "target_velocity_xyz": np.array([0.0, 0.0, 1.0]),  # +Z at 1 m/s
+        "tracking_axis": 2,                                 # Z is the primary axis
     },
 }
 
-# Derived: convert m/s -> rad/s for the drive target
 for mode_name in ["drive_sideways", "drive_up"]:
     MODES[mode_name]["actuator_target_rads"] = (
         MODES[mode_name]["actuator_target_ms"] / WHEEL_RADIUS
     )
 
-# This set runs well with hold and sideways mode 
-DEFAULT_PARAMS = {
-    'ground_friction': [0.923048, 0.000546, 0.000241],
-    'solref': [0.000349, 30.867833],
-    'solimp': [0.870259, 0.980192, 0.000135, 0.5, 1.0],
-    'noslip_iterations': 12,
-    'rocker_stiffness': 991.791538,
-    'rocker_damping': 0.279167,
-    'wheel_kp': 1.655694,
-    'wheel_kv': 4.849150,
-    'Br': 1.490629,
-    'max_magnetic_distance': 0.009070,
-    'max_force_per_wheel': 53.821678,
+BASELINE_PARAMS = {
+    "ground_friction": [0.95, 0.01, 0.01],
+    "solref": [0.0004, 25.0],
+    "solimp": [0.9, 0.95, 0.001, 0.5, 1.0],
+    "noslip_iterations": 15,
+    "rocker_stiffness": 500.0,  # FIX: was 30.0, outside search space [100, 1000]
+    "rocker_damping": 1.0,
+    "wheel_kp": 10.0,
+    "wheel_kv": 1.0,
+    "Br": 1.48,
+    "max_magnetic_distance": 0.010,
+    "max_force_per_wheel": 50.0,
 }
 
-# Bayesian optimization search space
-SEARCH_SPACE = [
-    # Magnetic parameters
-    Real(1.48 * 0.9, 1.48 * 1.1, "uniform", name='Br'),
-    
-    # Solver parameters
-    Real(0.0001, 0.0008, "uniform", name='solref_timeconst'),
-    Real(10.0, 50.0, "uniform", name='solref_dampratio'),
-    Real(0.8, 0.99, "uniform", name='solimp_dmin'),
-    Real(0.9, 1.0, "uniform", name='solimp_dmax'),
-    Real(1e-4, 1e-2, "log-uniform", name='solimp_width'),
-    
-    # Friction parameters (log-uniform for small values)
-    Real(0.9, 1.0, "uniform", name='sliding_friction'),
-    Real(1e-5, 0.1, "log-uniform", name='torsional_friction'),
-    Real(1e-5, 0.1, "log-uniform", name='rolling_friction'),
-    
-    # Joint dynamics (log-uniform spans order of magnitude)
-    Real(100.0, 1000.0, "uniform", name='rocker_stiffness'),
-    Real(0.1, 5.0, "log-uniform", name='rocker_damping'),
-    
-    # Control gains (log-uniform)
-    Real(1.0, 50.0, "log-uniform", name='wheel_kp'),
-    Real(0.1, 10.0, "log-uniform", name='wheel_kv'),
-    
-    # Magnetic cutoff (log-uniform)
-    Real(0.005, 0.1, "log-uniform", name='max_magnetic_distance'),
-    
-    # Solver iterations (integer, uniform)
-    Integer(5, 30, name='noslip_iterations'),
-    Real(100.0, 1000.0, "uniform", name='max_force_per_wheel'),
-]
+DEFAULT_PARAMS = BASELINE_PARAMS.copy()
 
+SEARCH_SPACE = [
+    Real(1.48 * 0.9, 1.48 * 1.1, prior="uniform", name="Br"),
+    Real(0.0001, 0.0008, prior="uniform", name="solref_timeconst"),
+    Real(10.0, 50.0, prior="uniform", name="solref_dampratio"),
+    Real(0.8, 0.99, prior="uniform", name="solimp_dmin"),
+    Real(0.9, 1.0, prior="uniform", name="solimp_dmax"),
+    Real(1e-4, 1e-2, prior="log-uniform", name="solimp_width"),
+    Real(0.9, 1.0, prior="uniform", name="sliding_friction"),
+    Real(1e-5, 0.1, prior="log-uniform", name="torsional_friction"),
+    Real(1e-5, 0.1, prior="log-uniform", name="rolling_friction"),
+    Real(100.0, 1000.0, prior="uniform", name="rocker_stiffness"),
+    Real(0.1, 5.0, prior="log-uniform", name="rocker_damping"),
+    Real(1.0, 50.0, prior="log-uniform", name="wheel_kp"),
+    Real(0.1, 10.0, prior="log-uniform", name="wheel_kv"),
+    Real(0.005, 0.1, prior="log-uniform", name="max_magnetic_distance"),
+    Integer(5, 30, name="noslip_iterations"),
+    Real(100.0, 1000.0, prior="uniform", name="max_force_per_wheel"),  # RESTORED: old code [100,1000] — strong adhesion prevents slip
+]
