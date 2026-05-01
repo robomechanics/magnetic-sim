@@ -252,6 +252,9 @@ def run_floor(params: dict) -> None:
         v.cam.distance  = 1.2
         v.cam.elevation = -20
         v.cam.azimuth   = 45
+        v.opt.geomgroup[3]                                    = 0  # hide collision meshes (group 3) — fixes "4 links" replacing body
+        v.opt.flags[mujoco.mjtVisFlag.mjVIS_JOINT]            = 0  # hide joint axes — fixes glare
+        v.opt.flags[mujoco.mjtVisFlag.mjVIS_PERTFORCE]        = 0  # hide xfrc_applied arrows — unintended force arrows
 
         step_start = time.perf_counter()
 
@@ -294,7 +297,7 @@ def run_floor(params: dict) -> None:
                 ik_step_counter += 1
                 if ik_step_counter >= IK_EVERY_N:
                     ik_step_counter = 0
-                    ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP)
+                    ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP, SWING_FOOT)
 
                 data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
 
@@ -420,7 +423,7 @@ def run_wall(params: dict) -> None:
                 ik_step_counter += 1
                 if ik_step_counter >= IK_EVERY_N:
                     ik_step_counter = 0
-                    ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP)
+                    ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP, SWING_FOOT)
 
                 data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
 

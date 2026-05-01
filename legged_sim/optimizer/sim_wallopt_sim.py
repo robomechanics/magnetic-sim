@@ -1,21 +1,24 @@
 """
-sim_wallopt_sim.py — headless f2w runner for the FL wall-adhesion optimizer.
+sim_wallopt_sim.py — Headless f2w runner for the FL wall-adhesion optimizer.
 
 Phases executed:
-  1. Settle   (SETTLE_TIME s)      — all magnets ON, robot drops onto floor
-  2. FL f2w   (sequence "f2w")     — FL lifts, swings, orients, reaches wall
-  3. FL plant                      — FL declared planted after DUAL_REACH_DWELL s in F2W_REACH;
-                                     FL baseline position captured here
-  4. FR f2w   (sequence "f2w_fr")  — FR executes its mirror sequence
-     Sampling starts FR_MEASURE_DELAY s after FR runner starts (FR is in early LIFT).
-     Sampling ends when FR has been in F2W_REACH for FR_REACH_DWELL s, at which
-     point FR is also planted and the trial is done.
+  1. Settle  (SETTLE_TIME s)   — all magnets ON, robot drops onto floor
+  2. FL f2w  (sequence "f2w") — FL lifts, swings, orients, reaches wall
+  3. FL hold (FL_HOLD s)      — FL planted on wall; FR/BL/BR drift sampled here
 
 Reward signal (minimise):
-  - FL EE XYZ drift from planted baseline (65% of cost)
-  - BL/BR EE mean XYZ drift from their settle-time positions (35% of cost)
+  - Mean XYZ drift norm of FR/BL/BR from settled baselines (30% of cost)
+  - max(0, fl_ee_x - fl_planted_x): FL electromagnet X penetration past planted baseline (30% of cost)
+  - Fraction of hold steps where any stance foot had zero mag force (40% of cost)
+
+Returns (stance_norm, stance_into_x, zero_contact_frac):
+  stance_norm:       mean ‖drift‖ of FR/BL/BR EE from settled baselines (m).
+  stance_into_x:     FL electromagnet X penetration past its planted baseline (m).
+  zero_contact_frac: fraction of sampling steps where any stance foot had zero mag force.
+  Returns (1.0, 1.0, 1.0) on failure (no samples collected).
 """
 
+import fcntl
 import os
 import sys
 import numpy as np
@@ -23,34 +26,38 @@ import mujoco
 import mink
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
+# OPTIMIZER_DIR: directory containing this file (and combined_config.py).
+# LEGGED_DIR:    parent directory containing config.py and sequences.py.
+# Both are added to sys.path so this file works standalone AND when imported
+# as a module by the combined optimizer's worker subprocesses.
 
 OPTIMIZER_DIR = os.path.abspath(os.path.dirname(__file__))
 LEGGED_DIR    = os.path.abspath(os.path.join(OPTIMIZER_DIR, ".."))
-SCENE_XML     = os.path.join(LEGGED_DIR, "mwc_mjcf", "scene.xml")
+SCENE_XML     = os.path.join(OPTIMIZER_DIR, "mwc_mjcf", "scene.xml")
 
-for _p in (LEGGED_DIR, OPTIMIZER_DIR):
+for _p in (OPTIMIZER_DIR, LEGGED_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from config import (
-    MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES,
-    TIMESTEP,
-    KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
-    bake_joint_angles,
-)
+# Physics constants: prefer combined_config (combined optimizer context);
+# fall back to config (standalone / legged_sim context).
+try:
+    from combined_config import MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES, TIMESTEP
+except ImportError:
+    from config import MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES, TIMESTEP
+
+# Legged-sim-specific: always from the parent legged_sim config.
+from config import KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG, bake_joint_angles
 from sequences import SEQUENCES, SequenceRunner
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-FEET             = ('FL', 'FR', 'BL', 'BR')
-STANCE_FEET      = ('BL', 'BR')   # floor feet whose drift we also penalise
+FEET        = ('FL', 'FR', 'BL', 'BR')
+STANCE_FEET = ('FR', 'BL', 'BR')   # feet whose stability is measured during FL wall hold
 
-SETTLE_TIME      = 2.0   # s — all magnets ON
-DUAL_REACH_DWELL = 3.0   # s — FL must hold F2W_REACH this long before declared planted
-FR_MEASURE_DELAY = 0.5   # s after FR runner starts before sampling begins
-                          #   (FR is in early LIFT; short delay skips the step-off transient)
-FR_REACH_DWELL   = 2.0   # s FR must be in F2W_REACH before trial ends (clean stop condition)
-                          #   F2W_REACH is unbounded so runner.done never fires; we use dwell instead
+SETTLE_TIME    = 2.0   # s — all magnets ON
+FL_REACH_DWELL = 1.0   # s FL must hold F2W_REACH before sampling begins
+FL_HOLD        = 3.0   # s — sampling window after FL is planted on wall
 
 IK_DAMPING  = 1e-3
 IK_EVERY_N  = 10    # IK solve every N physics steps
@@ -68,12 +75,15 @@ def _mag_force(dist: float, Br: float) -> float:
     return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * dist) ** 4)
 
 
-def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids=None):
+def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids=None) -> dict:
+    """Apply magnetic forces and return {body_id: force_magnitude_N} for each magnet body."""
     if off_mids is None:
         off_mids = set()
     _fromto = np.zeros(6)
+    magnitudes = {}
     for mid in magnet_ids:
         if mid in off_mids:
+            magnitudes[mid] = 0.0
             continue
         fvec = np.zeros(3)
         for gid in sphere_gids[mid]:
@@ -92,14 +102,23 @@ def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids
         tot = np.linalg.norm(fvec)
         if tot > params['max_force_per_wheel']:
             fvec *= params['max_force_per_wheel'] / tot
+            tot   = params['max_force_per_wheel']
         data.xfrc_applied[mid, :3] += fvec
+        magnitudes[mid] = tot
+    return magnitudes
 
 
 # ── Model setup ───────────────────────────────────────────────────────────────
 
 def _setup_model(params: dict):
-    bake_joint_angles(os.path.join(LEGGED_DIR, "mwc_mjcf", "robot.xml"))
-    model = mujoco.MjModel.from_xml_path(SCENE_XML)
+    robot_xml = os.path.join(OPTIMIZER_DIR, "mwc_mjcf", "robot.xml")
+    lock_path = robot_xml + ".lock"
+    with open(lock_path, "w") as _lock:
+        fcntl.flock(_lock, fcntl.LOCK_EX)
+        bake_joint_angles(robot_xml)
+        model = mujoco.MjModel.from_xml_path(SCENE_XML)
+        fcntl.flock(_lock, fcntl.LOCK_UN)
+
     data  = mujoco.MjData(model)
     model.opt.timestep = TIMESTEP
     mujoco.mj_resetData(model, data)
@@ -167,7 +186,7 @@ class _PID:
         return torques
 
 
-# ── IK solver (mirrors sim.py IKSolver with stance_se3 orientation locking) ───
+# ── IK solver ─────────────────────────────────────────────────────────────────
 
 def _se3_from_pos(pos):
     T = np.eye(4); T[:3, 3] = pos
@@ -198,7 +217,7 @@ class _IK:
         self.ctrl_jids    = [model.actuator_trnid[i, 0] for i in range(model.nu)]
 
         self.stance_targets  = {}
-        self.stance_se3      = {}   # foot → 4×4 SE3 for wall-mounted feet (orientation held)
+        self.stance_se3      = {}
         self._ori_target_rot = None
 
     def ee_pos(self, data, foot) -> np.ndarray:
@@ -290,40 +309,47 @@ class _IK:
 
 # ── Main headless runner ──────────────────────────────────────────────────────
 
-def run_headless_wall(params: dict) -> tuple[float, float, float, float]:
+def run_headless_wall(params: dict) -> tuple[float, float, float]:
     """
-    Run settle → FL f2w → FR f2w_fr headlessly.
+    Run settle → FL f2w → FL hold headlessly.
 
     Sampling window:
-      Start: FR_MEASURE_DELAY s after FR runner starts (FR in early LIFT)
-      End:   FR has been in F2W_REACH for FR_REACH_DWELL s  ← clean stop, no runaway
+      Start: FL has been in F2W_REACH for FL_REACH_DWELL s (FL firmly planted)
+      End:   FL_HOLD s of sampling complete
 
     Returns:
-        (fl_x, fl_y, fl_z, stance_xyz) all in metres.
-        fl_*:      mean absolute XYZ drift of FL EE from its planted baseline.
-        stance_xyz: mean absolute XYZ drift of BL+BR EE from their settle positions.
-        Returns (1, 1, 1, 1) on failure (FL never reached wall, etc.).
+        (stance_norm, stance_into_x, zero_contact_frac).
+        stance_norm:       mean ‖drift‖ of FR/BL/BR EE from settled baselines (m).
+        stance_into_x:     FL electromagnet X penetration past its planted baseline (m);
+                           positive when magnetic force drives FL further into the wall (+X).
+        zero_contact_frac: fraction of sampling steps where ANY stance foot had
+                           zero magnetic force. 0.0 = full contact, 1.0 = always lost.
+        Returns (1.0, 1.0, 1.0) on failure (no samples collected).
     """
     model, data, plate_ids, magnet_ids, sphere_gids = _setup_model(params)
     ik  = _IK(model)
     pid = _PID(model)
 
+    # foot-name → magnet body ID for zero-contact tracking
+    magnet_bid = {
+        name.split('_', 1)[1]: bid
+        for name, bid in zip(MAGNET_BODY_NAMES, magnet_ids)
+    }
+
     fl_mag_bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "electromagnet_FL")
-    fr_mag_bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "electromagnet_FR")
     fl_hip_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "hip_pitch_FL")
-    fr_hip_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "hip_pitch_FR")
 
     _wall_gid      = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall")
     _ray_geomgroup = np.zeros(6, np.uint8)
     _geomid_out    = np.array([-1], dtype=np.int32)
 
-    def _wall_dist_fn(ee_bid, hip_jid, ray_dir_override=None):
-        pos     = data.xpos[ee_bid].copy()
+    def _wall_dist_fn(ray_dir_override=None):
+        pos     = data.xpos[fl_mag_bid].copy()
         ray_dir = (np.array(ray_dir_override, float) if ray_dir_override is not None
-                   else -data.xmat[ee_bid].reshape(3, 3)[:, 1])
+                   else -data.xmat[fl_mag_bid].reshape(3, 3)[:, 1])
         ray_dir /= np.linalg.norm(ray_dir)
         _geomid_out[0] = -1
-        dist = mujoco.mj_ray(model, data, pos, ray_dir, _ray_geomgroup, 1, ee_bid, _geomid_out)
+        dist = mujoco.mj_ray(model, data, pos, ray_dir, _ray_geomgroup, 1, fl_mag_bid, _geomid_out)
         if dist < 0 or int(_geomid_out[0]) != _wall_gid:
             return np.inf
         return float(dist)
@@ -333,48 +359,27 @@ def run_headless_wall(params: dict) -> tuple[float, float, float, float]:
         for i in range(model.nu)
     ])
 
-    # ── Mutable swing-foot state ───────────────────────────────────────────────
-    swing_foot_ref    = ["FL"]
-    hip_jid_ref       = [fl_hip_jid]
-    swing_mag_bid_ref = [fl_mag_bid]
-    swing_off         = {fl_mag_bid}
+    fl_off = {fl_mag_bid}
+    runner = SequenceRunner(SEQUENCES["f2w"])
 
-    runner      = SequenceRunner(SEQUENCES["f2w"])
-    fr_started  = [False]
-    fr_start_t  = [None]   # sim time when FR runner begins
-    fl_baseline = [None]   # FL EE XYZ at plant time
+    # Sample accumulators — FR/BL/BR stance feet + FL wall contact
+    stance_baselines:      dict[str, np.ndarray] = {}
+    stance_norm_samples:   list[float] = []   # mean ‖drift‖ across FR/BL/BR each step
+    stance_into_x_samples: list[float] = []   # FL em body X penetration past planted baseline each step
+    # Zero-contact tracking — a step is lost if ANY stance foot has zero mag force
+    zero_contact_steps: int = 0
+    total_sample_steps: int = 0
 
-    # BL/BR baselines — captured at settle time
-    stance_baselines: dict[str, np.ndarray] = {}
+    settled        = False
+    sampling       = False   # True once FL is firmly planted and hold begins
+    sample_start_t = None
+    fl_reach_t     = None    # time FL first entered F2W_REACH
+    fl_plant_x     = None    # FL electromagnet body X captured when sampling starts
+    target_pos     = np.zeros(3)
+    face_axis      = None
+    ik_counter     = [0]
 
-    # Sample accumulators
-    fl_drift_samples:     list[np.ndarray] = []   # (3,) abs XYZ each step
-    stance_drift_samples: list[float]      = []   # scalar mean abs XYZ each step
-
-    def _start_runner_for(foot: str, seq_name: str, t: float):
-        nonlocal runner
-        runner = SequenceRunner(SEQUENCES[seq_name])
-        ik._ori_target_rot = None
-        ee_home = ik.ee_pos(data, foot).copy()
-        runner.start(t, {
-            'foot':              foot,
-            'ee_home':           ee_home,
-            'ee_pos_fn':         lambda: ik.ee_pos(data, swing_foot_ref[0]),
-            'hip_pivot_fn':      lambda: data.xanchor[hip_jid_ref[0]].copy(),
-            'wall_dist_fn':      lambda ray_dir_override=None: _wall_dist_fn(
-                                     ik.ee_bids[swing_foot_ref[0]],
-                                     hip_jid_ref[0], ray_dir_override),
-            'magnet_disable_fn': lambda: swing_off.add(swing_mag_bid_ref[0]),
-            'magnet_enable_fn':  lambda: swing_off.discard(swing_mag_bid_ref[0]),
-        })
-
-    settled    = False
-    target_pos = np.zeros(3)
-    face_axis  = None
-    ik_counter = [0]
-
-    # Budget: settle + FL f2w (~12s) + dwell + FR f2w (~12s) + reach dwell
-    max_time = SETTLE_TIME + 12.0 + DUAL_REACH_DWELL + 12.0 + FR_REACH_DWELL + 2.0
+    max_time = SETTLE_TIME + 12.0 + FL_REACH_DWELL + FL_HOLD + 1.0
 
     while data.time < max_time:
         t = data.time
@@ -392,94 +397,93 @@ def run_headless_wall(params: dict) -> tuple[float, float, float, float]:
             settled = True
             ik.record_stance(data)
             target_pos = ik.ee_pos(data, "FL").copy()
-            _start_runner_for("FL", "f2w", t)
-            # Capture BL/BR baselines at settle — these are the "correct" positions
+            runner.start(t, {
+                'foot':              "FL",
+                'ee_home':           target_pos.copy(),
+                'ee_pos_fn':         lambda: ik.ee_pos(data, "FL"),
+                'hip_pivot_fn':      lambda: data.xanchor[fl_hip_jid].copy(),
+                'wall_dist_fn':      _wall_dist_fn,
+                'magnet_disable_fn': lambda: fl_off.add(fl_mag_bid),
+                'magnet_enable_fn':  lambda: fl_off.discard(fl_mag_bid),
+            })
+            # Capture FR/BL/BR settled baselines — reference for drift norm penalty
             for foot in STANCE_FEET:
                 stance_baselines[foot] = ik.ee_pos(data, foot).copy()
 
         # ── Magnets ───────────────────────────────────────────────────────────
         data.xfrc_applied[:] = 0
-        _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params,
-                   off_mids=swing_off)
+        mag_forces = _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params,
+                                off_mids=fl_off)
 
-        # ── FL→FR transition ──────────────────────────────────────────────────
-        if not fr_started[0]:
+        # ── IK solve (only while FL is still moving) ──────────────────────────
+        if not sampling:
+            ik_counter[0] += 1
+            if ik_counter[0] >= IK_EVERY_N:
+                ik_counter[0] = 0
+                target_pos, face_axis, pos_cost, ori_cost = runner.step(t, {
+                    'ee_pos_fn':    lambda: ik.ee_pos(data, "FL"),
+                    'hip_pivot_fn': lambda: data.xanchor[fl_hip_jid].copy(),
+                })
+                ctrl_targets = ik.solve(
+                    target_pos, data, IK_EVERY_N * TIMESTEP,
+                    swing_foot="FL", face_axis=face_axis,
+                    position_cost=pos_cost, orientation_cost=ori_cost,
+                )
+
+            # ── Detect FL entering F2W_REACH ──────────────────────────────────
             ph = runner.current_phase
-            fl_planted = (
-                runner.done
-                or (ph is not None
-                    and ph.name == "F2W_REACH"
-                    and (t - runner.phase_t0) >= DUAL_REACH_DWELL)
-            )
-            if fl_planted:
-                fr_started[0] = True
-                fr_start_t[0] = t
-                runner.force_complete()
-                ik.record_stance(data)
-                ik.lock_stance_orientation(data, "FL")
-                fl_baseline[0] = ik.ee_pos(data, "FL").copy()
-                swing_foot_ref[0]    = "FR"
-                hip_jid_ref[0]       = fr_hip_jid
-                swing_mag_bid_ref[0] = fr_mag_bid
-                swing_off.clear()
-                swing_off.add(fr_mag_bid)
-                _start_runner_for("FR", "f2w_fr", t)
-
-        # ── IK solve ──────────────────────────────────────────────────────────
-        ik_counter[0] += 1
-        if ik_counter[0] >= IK_EVERY_N:
-            ik_counter[0] = 0
-            sf = swing_foot_ref[0]
-            target_pos, face_axis, pos_cost, ori_cost = runner.step(t, {
-                'ee_pos_fn':    lambda: ik.ee_pos(data, swing_foot_ref[0]),
-                'hip_pivot_fn': lambda: data.xanchor[hip_jid_ref[0]].copy(),
-            })
-            ctrl_targets = ik.solve(
-                target_pos, data, IK_EVERY_N * TIMESTEP,
-                swing_foot=sf, face_axis=face_axis,
-                position_cost=pos_cost, orientation_cost=ori_cost,
-            )
+            if ph is not None and ph.name == "F2W_REACH":
+                if fl_reach_t is None:
+                    fl_reach_t = t
+                if (t - fl_reach_t) >= FL_REACH_DWELL:
+                    sampling       = True
+                    sample_start_t = t
+                    ik.lock_stance_orientation(data, "FL")
+                    fl_plant_x     = ik.ee_pos(data, "FL")[0]   # X baseline when FL plants on wall
+            else:
+                fl_reach_t = None   # reset if FL exits reach phase unexpectedly
 
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
         mujoco.mj_step(model, data)
 
-        # ── Sampling: from FR_MEASURE_DELAY after FR starts ───────────────────
-        # This captures the ENTIRE FR swing, orient, and reach — all the moments
-        # that perturb the body and stress FL's wall hold.
-        if fr_started[0] and t >= fr_start_t[0] + FR_MEASURE_DELAY:
-            # FL drift from its planted baseline
-            fl_now = ik.ee_pos(data, "FL")
-            fl_drift_samples.append(np.abs(fl_now - fl_baseline[0]))
+        # ── Sampling during FL hold ───────────────────────────────────────────
+        # 30%: mean ‖drift‖ of FR/BL/BR EE from their settled baselines.
+        # 30%: FL EE X penetration past its planted baseline (positive = further into wall).
+        # 40%: fraction of steps where any stance foot loses magnetic contact.
+        if sampling:
+            norms = []
+            for foot in STANCE_FEET:
+                ee = ik.ee_pos(data, foot)
+                norms.append(np.linalg.norm(ee - stance_baselines[foot]))
+            # Wall penetration: FL electromagnet body pushed past its planted X baseline.
+            # Positive when magnetic force drives FL further into the wall (+X direction).
+            fl_ee_x = ik.ee_pos(data, "FL")[0]
+            stance_norm_samples.append(float(np.mean(norms)))
+            stance_into_x_samples.append(max(0.0, fl_ee_x - fl_plant_x))
+            # Zero-contact: step is lost if ANY stance foot has zero mag force
+            if any(mag_forces.get(magnet_bid[foot], 0.0) == 0.0 for foot in STANCE_FEET):
+                zero_contact_steps += 1
+            total_sample_steps += 1
 
-            # BL/BR drift from their settle-time positions
-            stance_drifts = [
-                np.abs(ik.ee_pos(data, foot) - stance_baselines[foot]).mean()
-                for foot in STANCE_FEET
-            ]
-            stance_drift_samples.append(float(np.mean(stance_drifts)))
-
-        # ── Stop condition: FR has dwelt in F2W_REACH long enough ─────────────
-        # runner.done never fires (F2W_REACH is unbounded), so we use dwell time.
-        if fr_started[0]:
-            ph = runner.current_phase
-            if (ph is not None
-                    and ph.name == "F2W_REACH"
-                    and (t - runner.phase_t0) >= FR_REACH_DWELL):
+            if (t - sample_start_t) >= FL_HOLD:
                 break
 
-    if not fl_drift_samples:
-        return 1.0, 1.0, 1.0, 1.0
+    if not stance_norm_samples:
+        return 1.0, 1.0, 1.0
 
-    fl_arr = np.array(fl_drift_samples)        # (N, 3)
-    fl_mean = fl_arr.mean(axis=0)              # mean abs drift per axis
-    stance_mean = float(np.mean(stance_drift_samples))
-
-    return float(fl_mean[0]), float(fl_mean[1]), float(fl_mean[2]), stance_mean
+    zero_contact_frac = zero_contact_steps / total_sample_steps
+    return (float(np.mean(stance_norm_samples)),
+            float(np.mean(stance_into_x_samples)),
+            zero_contact_frac)
 
 
 if __name__ == "__main__":
-    from sim_wallopt_config import PARAMS
+    try:
+        from combined_config import PARAMS
+    except ImportError:
+        from sim_wallopt_config import PARAMS
     print("Running single wall-adhesion trial with default PARAMS...")
-    fl_x, fl_y, fl_z, stance = run_headless_wall(PARAMS)
-    print(f"FL wall drift  — x: {fl_x*1000:.2f}mm  y: {fl_y*1000:.2f}mm  z: {fl_z*1000:.2f}mm")
-    print(f"BL/BR stance   — mean: {stance*1000:.2f}mm")
+    stance_norm, stance_into_x, zero_frac = run_headless_wall(PARAMS)
+    print(f"Stance hold — norm: {stance_norm*1000:.2f}mm  "
+          f"wall-pen: {stance_into_x*1000:.4f}mm  "
+          f"zero-contact: {zero_frac*100:.1f}%")

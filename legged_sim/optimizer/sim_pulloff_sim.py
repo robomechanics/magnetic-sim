@@ -17,25 +17,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 import mujoco
 
-# ── Paths (mirrors sim_opt_sim.py) ───────────────────────────────────────────
+# ── Paths ─────────────────────────────────────────────────────────────────────
+# OPTIMIZER_DIR: directory containing this file (and combined_config.py).
+# LEGGED_DIR:    parent directory containing config.py.
+# Both are added to sys.path so this file works standalone AND when imported
+# as a module by the combined optimizer's worker subprocesses.
 
-LEGGED_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-SCENE_XML  = os.path.join(LEGGED_DIR, "mwc_mjcf", "scene.xml")
+OPTIMIZER_DIR = os.path.abspath(os.path.dirname(__file__))
+LEGGED_DIR    = os.path.abspath(os.path.join(OPTIMIZER_DIR, ".."))
+SCENE_XML     = os.path.join(OPTIMIZER_DIR, "mwc_mjcf", "scene.xml")
 
-if LEGGED_DIR not in sys.path:
-    sys.path.insert(0, LEGGED_DIR)
+for _p in (OPTIMIZER_DIR, LEGGED_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
-from config import (
-    MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES,
-    TIMESTEP,
-    KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
-)
+# Physics constants: prefer combined_config (combined optimizer context);
+# fall back to config (standalone / legged_sim context).
+try:
+    from combined_config import MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES, TIMESTEP
+except ImportError:
+    from config import MU_0, MAGNET_VOLUME, MAGNET_BODY_NAMES, TIMESTEP
 
-from sim_pulloff_config import (
-    PULL_RATE, PULL_RATE_OPT, SETTLE_TIME, SIM_DURATION,
-    DETACH_HOLD,
-    PARAMS, ACTIVE_PRESET,
-)
+# Legged-sim-specific: always from the parent legged_sim config.
+from config import KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG
+
+# Timing / preset constants: prefer combined_config, fall back to sim_pulloff_config.
+try:
+    from combined_config import (
+        PULL_RATE, PULL_RATE_OPT, SETTLE_TIME, SIM_DURATION, DETACH_HOLD,
+        PULLOFF_PARAMS as PARAMS,
+    )
+    ACTIVE_PRESET = 'pull_off'
+except ImportError:
+    from sim_pulloff_config import (
+        PULL_RATE, PULL_RATE_OPT, SETTLE_TIME, SIM_DURATION, DETACH_HOLD,
+        PARAMS, ACTIVE_PRESET,
+    )
 
 # The FL electromagnet is the test subject for the pull-off sim.
 PULL_FOOT      = "FL"
@@ -194,7 +211,7 @@ def run_headless(pull_rate=PULL_RATE, params=None):
 
     # PID holds the robot in its baked pose throughout — without this the body
     # sags under gravity during settle and the FL wheel lifts off the floor,
-    # preventing magnetic engagement. Mirrors sim_opt_sim.run_headless_lift.
+    # preventing magnetic engagement.
     pid = _PID(model)
     ctrl_targets = np.zeros(model.nu)
     for i in range(model.nu):
@@ -275,6 +292,7 @@ def run_headless(pull_rate=PULL_RATE, params=None):
 
 
 def smooth(data, window=200):
+    """Box-car moving average with window size `window` steps."""
     arr = np.array(data, dtype=float)
     return np.convolve(arr, np.ones(window) / window, mode="same")
 
@@ -345,45 +363,18 @@ def plot(records, pulloff_force, detach_time, pull_rate, params):
 
 
 # ── Optimizer interface ───────────────────────────────────────────────────────
-# These two functions mirror the floor/wall sims so combined_optimizer.py
-# can treat all three sims uniformly.
-
-def calculate_cost(pulloff_force: float, target: float) -> dict:
-    """
-    One-sided shortfall cost for pull-off force (lower = better).
-
-    target is params['max_force_per_wheel'] — the adhesion ceiling the
-    magnetic model is claiming.  The sim should be able to produce that
-    force before the magnet detaches; if it can't, the physics parameters
-    are mis-calibrated and the shortfall is penalised.
-
-    Exceeding the target is free (cost = 0) — we don't want to sacrifice
-    slip resistance just to maximise pull-off beyond what the magnet model
-    already predicts.
-
-    Returns a dict matching the floor/wall cost interface:
-        total_cost      — normalised to [0, 1] (0 = at/above target)
-        pulloff_force   — raw measured force (N)
-        pulloff_target  — target used (= params['max_force_per_wheel'])
-        shortfall_n     — raw shortfall below target (N), 0 if met
-    """
-    shortfall = max(0.0, target - pulloff_force)
-    return {
-        "total_cost":     shortfall / target if target > 0 else 0.0,
-        "pulloff_force":  pulloff_force,
-        "pulloff_target": target,
-        "shortfall_n":    shortfall,
-    }
-
+# run_headless_lift is the entry point for combined_optimizer.py so all three
+# sims share a uniform single-float return interface.
 
 def run_headless_lift(params: dict) -> float:
     """
     Thin wrapper for combined_optimizer.py.
 
     Uses PULL_RATE_OPT (not PULL_RATE) so the ramp can reach the full
-    max_force_per_wheel search space ceiling (up to 1200 N).
+    max_force_per_wheel search space ceiling.
       PULL_RATE_OPT × (SIM_DURATION - SETTLE_TIME) = max ramp force
-      e.g. 40 N/s × 38 s = 1520 N  ≥  1200 N search space max  ✓
+      e.g. 40 N/s × 38 s = 1520 N  ≥  1500 N (combined optimizer space max)  ✓
+           40 N/s × 38 s = 1520 N  ≥  1200 N (standalone PULLOFF_SPACE max)   ✓
     """
     _, pulloff_force, _ = run_headless(pull_rate=PULL_RATE_OPT, params=params)
     return pulloff_force
@@ -397,8 +388,9 @@ if __name__ == "__main__":
     print(f"Running simulation (pull_rate={args.pull_rate} N/s, preset={ACTIVE_PRESET})...")
     records, pulloff_force, detach_time = run_headless(args.pull_rate, PARAMS)
 
+    # Plot results first; launch viewer after so the plot is not blocked.
+    plot(records, pulloff_force, detach_time, args.pull_rate, PARAMS)
+
     print("Launching viewer...")
     import pulloff_viewer
     pulloff_viewer.run_viewer(args.pull_rate)
-
-    plot(records, pulloff_force, detach_time, args.pull_rate, PARAMS)

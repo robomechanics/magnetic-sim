@@ -8,13 +8,8 @@ Scenario:
 Cost measures drift during the entire FR sequence (from FR LIFT start +0.5s
 through FR F2W_REACH completion):
 
-  FL wall drift (65% total):
-    39% — Z drift  (gravity-driven slip down the wall — primary failure mode)
-    13% — X drift  (into/away from wall)
-    13% — Y drift  (sideways along wall)
-
-  BL/BR stance drift (35% total, equal XYZ split):
-    ~11.7% each axis — mean of BL and BR EE drift from their settled positions
+  65% — XYZ drift norm of FL EE from planted baseline
+  35% — FL +X displacement into wall from planted baseline (positive only)
 """
 
 from dataclasses import dataclass
@@ -97,35 +92,22 @@ def point_to_params(point: list) -> dict:
 
 # ── Cost function ─────────────────────────────────────────────────────────────
 
-def calculate_cost(fl_x: float, fl_y: float, fl_z: float,
-                   stance_xyz: float = 0.0) -> dict:
+def calculate_cost(fl_norm: float, fl_pos_x: float) -> dict:
     """
-    Weighted drift cost during FR execution.
+    Weighted FL wall drift cost during FR execution.
 
-    FL wall drift (65% of total):
-      Z = 40% of FL share = 0.26 total  (gravity-driven slip, primary failure)
-      X = 30% of FL share = 0.195 total (into/away from wall)
-      Y = 30% of FL share = 0.195 total (sideways)
-
-    BL/BR stance drift (35% of total):
-      stance_xyz = mean absolute XYZ drift of BL and BR combined,
-                   weighted equally across axes. (floor feet slipping = instability)
+      65% — XYZ drift norm of FL EE from planted baseline
+      35% — FL +X displacement into wall (positive only)
 
     All inputs in metres.
     """
-    fl_z_cost      = 0.390 * fl_z
-    fl_x_cost      = 0.130 * fl_x
-    fl_y_cost      = 0.130 * fl_y
-    stance_cost    = 0.350 * stance_xyz
-    total          = fl_z_cost + fl_x_cost + fl_y_cost + stance_cost
+    norm_cost  = 0.65 * fl_norm
+    pos_x_cost = 0.35 * fl_pos_x
+    total      = norm_cost + pos_x_cost
     return {
-        "total_cost":   total,
-        "fl_x_drift":   fl_x,
-        "fl_y_drift":   fl_y,
-        "fl_z_drift":   fl_z,
-        "stance_drift": stance_xyz,
-        "fl_x_cost":    fl_x_cost,
-        "fl_y_cost":    fl_y_cost,
-        "fl_z_cost":    fl_z_cost,
-        "stance_cost":  stance_cost,
+        "total_cost":  total,
+        "fl_norm":     fl_norm,
+        "fl_pos_x":    fl_pos_x,
+        "norm_cost":   norm_cost,
+        "pos_x_cost":  pos_x_cost,
     }

@@ -34,17 +34,16 @@ def _load_viewer():
     return module
 
 # ── Paste your params here ────────────────────────────────────────────────────
-
 PARAMS = {
-    'ground_friction':       [0.0524955, 0.0101242, 7.27043e-05],
-    'solref':                [0.0213698, 10.0],
-    'solimp':                [0.464777, 0.9999, 0.000402506, 0.42134, 4.48834],
-    'noslip_iterations':     31,
-    'noslip_tolerance':      1.05336e-05,
-    'margin':                0.00351975,
-    'Br':                    1.99743,
-    'max_magnetic_distance': 0.0994066,
-    'max_force_per_wheel':   1037.79,
+    'ground_friction':       [0.0245472, 0.00408506, 4.24188e-05],
+    'solref':                [0.0181143, 10.0],
+    'solimp':                [0.308749, 0.9999, 0.000736676, 0.332268, 6.30009],
+    'noslip_iterations':     50,
+    'noslip_tolerance':      2.53973e-05,
+    'margin':                0.0101808,
+    'Br':                    1.99127,
+    'max_magnetic_distance': 0.118207,
+    'max_force_per_wheel':   867.437,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +53,7 @@ def main():
     parser.add_argument("--mode", "-m", default="all",
                         choices=["floor", "wall", "pulloff", "both", "all"],
                         help="Which simulation(s) to replay "
-                             "(both=floor+wall, all=floor+wall+pulloff, default: both)")
+                             "(both=floor+wall, all=floor+wall+pulloff, default: all)")
     args = parser.parse_args()
 
     if not PARAMS:
