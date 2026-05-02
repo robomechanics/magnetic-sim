@@ -2,7 +2,7 @@
 sim_opt_sim.py — Headless FL-lift runner for the floor-lift optimizer.
 
 Phases executed:
-  1. Settle  (SETTLE_TIME s)   — all magnets ON, robot drops onto floor
+  1. Settle  (SETTLE_TIME s)   — all magnets OFF, robot drops onto floor under gravity
   2. FL LIFT (sequence "f2w")  — FL runner advances until LIFT phase completes,
                                   then ctrl_targets are frozen (foot held up)
   3. Hold    (LIFT_HOLD s)     — FL held at lifted position; FR/BL/BR drift sampled here
@@ -389,9 +389,11 @@ def run_headless_floor(params: dict) -> tuple[float, float, float]:
         t = data.time
 
         # ── Settle ────────────────────────────────────────────────────────────
+        # Magnets OFF during settle — matches sim.py behaviour; gravity-only
+        # landing ensures the settled body state is consistent between the
+        # interactive sim and the optimizer.
         if t < SETTLE_TIME:
             data.xfrc_applied[:] = 0
-            _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
             data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
             mujoco.mj_step(model, data)
             continue

@@ -2,7 +2,7 @@
 sim_wallopt_sim.py — Headless f2w runner for the FL wall-adhesion optimizer.
 
 Phases executed:
-  1. Settle  (SETTLE_TIME s)   — all magnets ON, robot drops onto floor
+  1. Settle  (SETTLE_TIME s)   — all magnets OFF, robot drops onto floor under gravity
   2. FL f2w  (sequence "f2w") — FL lifts, swings, orients, reaches wall
   3. FL hold (FL_HOLD s)      — FL planted on wall; FR/BL/BR drift sampled here
 
@@ -385,9 +385,11 @@ def run_headless_wall(params: dict) -> tuple[float, float, float]:
         t = data.time
 
         # ── Settle ────────────────────────────────────────────────────────────
+        # Magnets OFF during settle — matches sim.py behaviour; gravity-only
+        # landing ensures the settled body state is consistent between the
+        # interactive sim and the optimizer.
         if t < SETTLE_TIME:
             data.xfrc_applied[:] = 0
-            _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
             data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
             mujoco.mj_step(model, data)
             continue
