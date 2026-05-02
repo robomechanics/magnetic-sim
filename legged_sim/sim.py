@@ -17,7 +17,7 @@ import mujoco
 import mujoco.viewer
 import mink
 
-# ── paths ───────────────────────────────────────────────────────────────────
+# ── paths ─────────────────────────────────────────────────────────────────────
 LEGGED_DIR = os.path.join(os.path.dirname(__file__), "..", "legged_sim")
 SCENE_XML  = os.path.join(LEGGED_DIR, "mwc_mjcf", "scene.xml")
 sys.path.insert(0, LEGGED_DIR)
@@ -28,10 +28,11 @@ from config import (
     KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
     bake_joint_angles, SEQUENCE as DEFAULT_SEQUENCE,
 )
-from sequences import SEQUENCES, SequenceRunner
+from sequences import SEQUENCES, SequenceRunner, IKTarget, PhaseContext
+from viewer import draw_markers, _build_joint_vis
 
 
-# ── constants ────────────────────────────────────────────────────────────────
+# ── constants ─────────────────────────────────────────────────────────────────
 
 FEET        = ('FL', 'FR', 'BL', 'BR')
 SWING_FOOT  = "FL"
@@ -39,24 +40,15 @@ SETTLE_TIME = 2.0
 IK_DAMPING  = 1e-3
 IK_EVERY_N  = 10      # physics steps between IK solves
 
-# f2w_both: seconds to dwell in F2W_REACH before considering FL "planted" and starting FR.
-# The foot is magnetically stuck to the wall by this point; we just wait for IK to settle.
+# f2w_both: seconds to dwell in F2W_REACH before considering a foot "planted".
 DUAL_REACH_DWELL = 3.0
 
 PID_KP, PID_KI, PID_KD, PID_I_CLAMP = 500.0, 200.0, 30.0, 100.0
 
 _BAR_WIDTH = 12
-_JOINT_COLORS = {
-    'hip_pitch': [1.0, 1.0, 0.0, 0.9],
-    'knee':      [0.0, 1.0, 1.0, 0.9],
-    'wrist':     [1.0, 0.0, 1.0, 0.9],
-    'ee2':       [0.2, 1.0, 0.5, 0.9],
-    'em_z':      [0.5, 0.5, 1.0, 0.9],
-    'ee':        [1.0, 0.5, 0.0, 0.9],
-}
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _se3_pos(pos):
     T = np.eye(4); T[:3, 3] = pos
@@ -66,20 +58,8 @@ def _mag_force(dist, Br):
     m = (Br * MAGNET_VOLUME) / MU_0
     return (3 * MU_0 * m**2) / (2 * np.pi * (2 * dist)**4)
 
-def _build_joint_vis(model):
-    """Pre-compute (jid, bid, local_axis, rgba) for draw_markers."""
-    out = []
-    for i in range(model.njnt):
-        jname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
-        if not jname or jname == "root":
-            continue
-        color = next((c for p, c in _JOINT_COLORS.items() if jname.startswith(p)),
-                     [0.5, 0.5, 0.5, 0.8])
-        out.append((i, model.jnt_bodyid[i], model.jnt_axis[i].copy(), color))
-    return out
 
-
-# ── physics ──────────────────────────────────────────────────────────────────
+# ── physics ───────────────────────────────────────────────────────────────────
 
 def apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, off_mids=frozenset()):
     """Apply dipole-dipole magnetic forces for all active magnets."""
@@ -157,10 +137,10 @@ def setup_model():
     return model, data, plate_ids, magnet_ids, sphere_gids
 
 
-# ── IK ───────────────────────────────────────────────────────────────────────
+# ── IK ────────────────────────────────────────────────────────────────────────
 
 class IKSolver:
-    """Whole-body IK: stance feet locked, swing foot tracks trajectory target."""
+    """Whole-body IK: stance feet locked, swing foot tracks IKTarget."""
 
     def __init__(self, model):
         self.model  = model
@@ -183,18 +163,14 @@ class IKSolver:
         self.ctrl_jids    = [model.actuator_trnid[i, 0] for i in range(model.nu)]
 
         self.stance_targets  = {}
-        self.stance_se3      = {}   # foot → 4×4 SE3 for feet whose orientation must be held
-        self._ori_target_rot = None  # cached rotation for active orientation phase
+        self.stance_se3      = {}   # foot → 4×4 matrix for wall-planted feet (pos + rot)
+        self._ori_target_rot = None # cached rotation for the current orientation phase
 
     def ee_pos(self, data, foot) -> np.ndarray:
         return data.xpos[self.ee_bids[foot]].copy()
 
     def lock_stance_orientation(self, data, foot):
-        """Snapshot full SE3 (position + rotation) for a foot that must hold its wall orientation.
-
-        After this call, solve() will constrain both position and orientation for `foot`
-        using orientation_cost=30.0, preventing rotational drift while it sits on the wall.
-        """
+        """Snapshot full SE3 for a wall-planted foot so IK holds both pos and rot."""
         bid = self.ee_bids[foot]
         T = np.eye(4)
         T[:3, :3] = data.xmat[bid].reshape(3, 3)
@@ -217,55 +193,63 @@ class IKSolver:
         for f, p in self.stance_targets.items():
             print(f"  {f}: [{p[0]:.4f}, {p[1]:.4f}, {p[2]:.4f}]")
 
-    def solve(self, swing_target, phys_data, dt, n_iter=10,
-              face_axis=None, position_cost=None, orientation_cost=None,
-              swing_foot=None) -> np.ndarray:
-        """Run IK and return joint position targets (ctrl array).
+    def solve(self, target: IKTarget, phys_data, dt: float, n_iter: int = 10,
+              swing_foot: str = None) -> np.ndarray:
+        """Run IK given an IKTarget and return joint position targets (ctrl array).
 
-        swing_foot: which foot is moving this step (defaults to module-level SWING_FOOT).
+        The IKTarget carries position, optional face_axis (for EE orientation),
+        and per-task costs — replacing the old (pos, face_axis, pos_cost, ori_cost) signature.
         """
-        _sf      = swing_foot if swing_foot is not None else SWING_FOOT
-        ik_qpos  = phys_data.qpos.copy()
-        pos_cost = position_cost    if position_cost    is not None else 10.0
-        ori_cost = orientation_cost if orientation_cost is not None else 0.0
+        _sf     = swing_foot if swing_foot is not None else SWING_FOOT
+        ik_qpos = phys_data.qpos.copy()
 
-        if face_axis is not None:
+        # ── build swing-foot SE3 target ───────────────────────────────────────
+        if target.face_axis is not None:
+            # Compute and cache the orientation rotation on first appearance.
             if self._ori_target_rot is None:
                 self._ori_target_rot = self._compute_ori_target(
-                    phys_data.xmat[self.ee_bids[_sf]].reshape(3, 3).copy(), face_axis)
-                print(f"[ik] orientation locked — EE -Y -> {(-self._ori_target_rot[:, 1]).round(3)}")
+                    phys_data.xmat[self.ee_bids[_sf]].reshape(3, 3).copy(),
+                    target.face_axis)
+                print(f"[ik] orientation locked — EE -Y -> "
+                      f"{(-self._ori_target_rot[:, 1]).round(3)}")
             T = np.eye(4)
             T[:3, :3] = self._ori_target_rot
-            T[:3,  3] = swing_target
+            T[:3,  3] = target.position
             target_se3 = mink.SE3.from_matrix(T)
         else:
+            # No orientation constraint — reset cache for next phase.
             self._ori_target_rot = None
-            target_se3 = _se3_pos(swing_target)
+            target_se3 = _se3_pos(target.position)
 
-        # Rebuild swing-foot task when orientation cost changes (mink bakes at construction).
-        if self.foot_tasks[_sf].orientation_cost != ori_cost:
+        # ── rebuild swing-foot task if cost changed (mink bakes at construction) ──
+        if self.foot_tasks[_sf].orientation_cost != target.orientation_cost:
             self.foot_tasks[_sf] = mink.FrameTask(
                 frame_name=f"electromagnet_{_sf}", frame_type="body",
-                position_cost=pos_cost, orientation_cost=ori_cost, lm_damping=IK_DAMPING)
+                position_cost=target.position_cost,
+                orientation_cost=target.orientation_cost,
+                lm_damping=IK_DAMPING)
         self.foot_tasks[_sf].set_target(target_se3)
-        self.foot_tasks[_sf].position_cost = pos_cost
+        self.foot_tasks[_sf].position_cost = target.position_cost
 
-        # Body orientation competes with EE; zero it during orientation phases.
-        self.body_task.orientation_cost = 0.0 if face_axis is not None else 50.0
+        # Body orientation competes with EE orientation task — zero it during orient phases.
+        self.body_task.orientation_cost = 0.0 if target.face_axis is not None else 50.0
 
+        # ── stance feet ────────────────────────────────────────────────────────
         for foot in FEET:
-            if foot != _sf:
-                if foot in self.stance_se3:
-                    # Full SE3 lock: foot is on the wall and must not rotate.
-                    se3_target = mink.SE3.from_matrix(self.stance_se3[foot])
-                    if self.foot_tasks[foot].orientation_cost != 30.0:
-                        self.foot_tasks[foot] = mink.FrameTask(
-                            frame_name=f"electromagnet_{foot}", frame_type="body",
-                            position_cost=50.0, orientation_cost=30.0, lm_damping=IK_DAMPING)
-                    self.foot_tasks[foot].set_target(se3_target)
-                else:
-                    self.foot_tasks[foot].set_target(_se3_pos(self.stance_targets[foot]))
-                    self.foot_tasks[foot].position_cost = 50.0
+            if foot == _sf:
+                continue
+            if foot in self.stance_se3:
+                # Wall foot: lock both position and rotation.
+                se3_target = mink.SE3.from_matrix(self.stance_se3[foot])
+                if self.foot_tasks[foot].orientation_cost != 30.0:
+                    self.foot_tasks[foot] = mink.FrameTask(
+                        frame_name=f"electromagnet_{foot}", frame_type="body",
+                        position_cost=50.0, orientation_cost=30.0, lm_damping=IK_DAMPING)
+                self.foot_tasks[foot].set_target(se3_target)
+            else:
+                # Floor foot: position-only lock.
+                self.foot_tasks[foot].set_target(_se3_pos(self.stance_targets[foot]))
+                self.foot_tasks[foot].position_cost = 50.0
 
         tasks = [self.body_task] + [self.foot_tasks[f] for f in FEET] + [self.posture_task]
 
@@ -297,7 +281,7 @@ class IKSolver:
         return (np.eye(3) + sin_a * K + (1. - cos_a) * (K @ K)) @ current_rot
 
 
-# ── control ──────────────────────────────────────────────────────────────────
+# ── control ───────────────────────────────────────────────────────────────────
 
 class PIDController:
     """Joint-space PID: position targets → torque commands."""
@@ -319,71 +303,57 @@ class PIDController:
         return torques
 
 
-# ── visualization ─────────────────────────────────────────────────────────────
+# ── surface contact / penetration ─────────────────────────────────────────────
 
-def _add_capsule(scn, size, pos, rot_flat, rgba):
-    if scn.ngeom < scn.maxgeom:
-        mujoco.mjv_initGeom(scn.geoms[scn.ngeom],
-                            mujoco.mjtGeom.mjGEOM_CAPSULE, size, pos, rot_flat, rgba)
-        scn.ngeom += 1
-
-def _add_sphere(scn, radius, pos, rgba):
-    if scn.ngeom < scn.maxgeom:
-        mujoco.mjv_initGeom(scn.geoms[scn.ngeom],
-                            mujoco.mjtGeom.mjGEOM_SPHERE,
-                            [radius, 0, 0], pos, np.eye(3).flatten(), rgba)
-        scn.ngeom += 1
-
-def draw_markers(viewer, model, data, ik, joint_vis,
-                 args, settled, target_pos, face_axis, swing_off,
-                 swing_mag_bid, swing_foot=SWING_FOOT):
-    """Render joint axes, magnet indicators, IK targets, and EE frame."""
-    scn = viewer._user_scn
-    scn.ngeom = 0
-
-    # joint rotation axes
-    for jid, bid, local_axis, color in joint_vis:
-        z = data.xmat[bid].reshape(3, 3) @ local_axis
-        z /= np.linalg.norm(z)
-        x = np.array([1, 0, 0]) if abs(z[0]) < 0.9 else np.array([0, 1, 0])
-        x = x - np.dot(x, z) * z;  x /= np.linalg.norm(x)
-        _add_capsule(scn, [0.009, 0.045, 0], data.xanchor[jid],
-                     np.column_stack([x, np.cross(z, x), z]).flatten(), color)
-
-    # magnet status (red = swing/off, green = stance/on)
+def _foot_surfaces(swing_foot: str, wall_feet: set) -> dict:
+    """Return expected surface for each foot: 'floor', 'wall', or 'swing'."""
+    out = {}
     for foot in FEET:
-        pos = data.xpos[ik.ee_bids[foot]].copy(); pos[2] += 0.035
-        color = [1.0, 0.1, 0.1, 0.9] if (settled and foot == swing_foot) else [0.1, 1.0, 0.1, 0.9]
-        _add_capsule(scn, [0.005, 0.025, 0], pos, np.eye(3).flatten(), color)
+        if foot == swing_foot:
+            out[foot] = 'swing'
+        elif foot in wall_feet:
+            out[foot] = 'wall'
+        else:
+            out[foot] = 'floor'
+    return out
 
-    if args.no_ik or not settled:
-        return
 
-    # IK target sphere + XYZ triad
-    if target_pos is not None:
-        _add_sphere(scn, 0.008, target_pos, [0.2, 1.0, 0.2, 0.5])
-        for offset, rot, rgba in [
-            (np.array([0.02, 0, 0]),  np.array([[0,0,1],[0,1,0],[-1,0,0]], float), [1,.2,.2,.8]),
-            (np.array([0, 0.02, 0]),  np.array([[1,0,0],[0,0,1],[0,-1,0]], float), [.2,1,.2,.8]),
-            (np.array([0, 0, 0.02]),  np.eye(3),                                   [.2,.2,1,.8]),
-        ]:
-            _add_capsule(scn, [0.002, 0.02, 0],
-                         target_pos + offset, rot.flatten(), rgba)
+_CONTACT_LIFT_THRESH = 0.008   # m — EE more than 8 mm above settle baseline = lost contact
 
-    # stance target spheres
+
+def _read_surface_penetration(data, ik, foot_surfaces: dict,
+                               wall_baselines: dict) -> dict:
+    """Measure EE intrusion into the expected surface using relative displacement.
+
+    Floor feet: drop below ik.stance_targets[foot][2] = floor penetration.
+    Wall feet:  advance past wall_baselines[foot][0]  = wall penetration.
+    """
+    result = {}
     for foot in FEET:
-        if foot != swing_foot and foot in ik.stance_targets:
-            _add_sphere(scn, 0.005, ik.stance_targets[foot], [1.0, 1.0, 0.2, 0.5])
+        surface = foot_surfaces.get(foot, 'floor')
+        ee = data.xpos[ik.ee_bids[foot]]
 
-    # EE local frame triad (X=red, Y=green, Z=blue) for active swing foot
-    ee_pos = data.xpos[ik.ee_bids[swing_foot]].copy()
-    ee_rot = data.xmat[ik.ee_bids[swing_foot]].reshape(3, 3)
-    for col, rgba in [(0, [1.,.2,.2,.9]), (1, [.2,1.,.2,.9]), (2, [.2,.2,1.,.9])]:
-        cz = ee_rot[:, col]
-        cx = np.array([1,0,0]) if abs(cz[0]) < 0.9 else np.array([0,1,0])
-        cx = cx - np.dot(cx, cz) * cz;  cx /= np.linalg.norm(cx)
-        _add_capsule(scn, [0.002, 0.02, 0], ee_pos + cz * 0.02,
-                     np.column_stack([cx, np.cross(cz, cx), cz]).flatten(), rgba)
+        if surface == 'swing':
+            result[foot] = ('swing', False, 0.0)
+
+        elif surface == 'floor':
+            if foot not in ik.stance_targets:
+                result[foot] = ('floor', False, 0.0)
+                continue
+            baseline_z = ik.stance_targets[foot][2]
+            drop       = baseline_z - ee[2]
+            contact    = (ee[2] - baseline_z) < _CONTACT_LIFT_THRESH
+            result[foot] = ('floor', contact, max(0.0, drop))
+
+        elif surface == 'wall':
+            if foot not in wall_baselines:
+                result[foot] = ('wall', False, 0.0)
+                continue
+            baseline_x = wall_baselines[foot][0]
+            advance    = ee[0] - baseline_x
+            result[foot] = ('wall', True, max(0.0, advance))
+
+    return result
 
 
 # ── entrypoint ────────────────────────────────────────────────────────────────
@@ -397,32 +367,30 @@ def main():
     parser.add_argument("--no-ik",    action="store_true")
     args = parser.parse_args()
 
-    # ── setup ─────────────────────────────────────────────────────────────
+    # ── setup ──────────────────────────────────────────────────────────────────
     model, data, plate_ids, magnet_ids, sphere_gids = setup_model()
     ik  = IKSolver(model)
     pid = PIDController(model)
 
-    # ── mutable swing-foot state (updated when FL→FR transition occurs) ───────
-    swing_foot_ref    = [SWING_FOOT]   # ["FL"] → ["FR"] after FL lands
+    # ── mutable swing-foot state ───────────────────────────────────────────────
+    swing_foot_ref    = [SWING_FOOT]
     hip_jid_ref       = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT,
                                             f"hip_pitch_{SWING_FOOT}")]
     swing_mag_bid_ref = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY,
                                             f"electromagnet_{SWING_FOOT}")]
-    body_id           = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY,  "main_frame")
+    body_id           = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "main_frame")
     joint_vis         = _build_joint_vis(model)
 
-    # convenience shorthands (read via ref so they stay current after foot switch)
-    def _swing_foot():      return swing_foot_ref[0]
-    def _hip_jid():         return hip_jid_ref[0]
-    def _swing_mag_bid():   return swing_mag_bid_ref[0]
+    def _swing_foot():    return swing_foot_ref[0]
+    def _hip_jid():       return hip_jid_ref[0]
+    def _swing_mag_bid(): return swing_mag_bid_ref[0]
 
-    # ── f2w helpers ────────────────────────────────────────────────────────
+    # ── f2w wall-distance helper ───────────────────────────────────────────────
     _wall_gid      = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall")
     _ray_geomgroup = np.zeros(6, np.uint8)
     _geomid_out    = np.array([-1], dtype=np.int32)
 
     def _compute_max_reach(foot: str) -> float:
-        """FK corner-sweep to find the maximum reach of `foot` from its hip."""
         from itertools import product as iproduct
         scratch   = mujoco.MjData(model)
         ee_bid    = ik.ee_bids[foot]
@@ -452,11 +420,9 @@ def main():
             print(f"[f2w] {foot} max reach from hip: {r * 1000:.1f} mm")
         return _max_reach_cache[foot]
 
-    # Pre-compute FL reach at startup (FR will be computed lazily on transition).
     _get_max_reach(SWING_FOOT)
 
     def _wall_dist_fn(ray_dir_override=None) -> float:
-        """Ray from current swing EE toward wall; returns distance (m) or np.inf."""
         sf      = _swing_foot()
         ee_bid  = ik.ee_bids[sf]
         pos     = data.xpos[ee_bid].copy()
@@ -469,7 +435,7 @@ def main():
         hit_gid = int(_geomid_out[0])
 
         if dist < 0 or hit_gid != _wall_gid:
-            print(f"[f2w] ⚠  Wall ray missed for {sf} — check robot orientation / wall placement")
+            print(f"[f2w] ⚠  Wall ray missed for {sf}")
             return np.inf
 
         fhip_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"hip_pitch_{sf}")
@@ -479,55 +445,59 @@ def main():
 
         return float(dist)
 
-    # ── sim state ──────────────────────────────────────────────────────────
+    # ── sim state ──────────────────────────────────────────────────────────────
     ctrl_targets = np.array([data.qpos[model.jnt_qposadr[model.actuator_trnid[i, 0]]]
                               for i in range(model.nu)])
 
-    # f2w runs FL then FR sequentially; f2w_fr is the FR-only sub-sequence used internally.
-    _is_dual      = (args.sequence == "f2w")
-    _first_seq    = "f2w"   if _is_dual else args.sequence
-    _second_seq   = "f2w_fr"
-    runner        = SequenceRunner(SEQUENCES[_first_seq])
-    fr_started    = [False]   # True once FR runner has been launched
+    _is_dual    = (args.sequence == "f2w")
+    _first_seq  = "f2w" if _is_dual else args.sequence
+    _second_seq = "f2w_fr"
+    runner      = SequenceRunner(SEQUENCES[_first_seq])
+    fr_started  = [False]
 
     swing_off  = {_swing_mag_bid()}
     settled    = False
-    target_pos = np.zeros(3)
-    face_axis  = None
+    ik_target  = IKTarget.position_only(np.zeros(3))   # updated each IK tick
     last_print = 0.0
     ik_counter = [0]
+
+    wall_feet      = set()
+    wall_baselines = {}
+    _fr_reach_t0   = [None]
 
     print(f"sequence={args.sequence}  phases={len(SEQUENCES[_first_seq])}  "
           f"magnets={'on' if args.magnets else 'off'}"
           + ("  [FL → FR]" if _is_dual else ""))
 
-    # ── runner-start helper ────────────────────────────────────────────────
+    # ── runner-start helper ────────────────────────────────────────────────────
     def _start_runner_for(foot: str, seq_name: str, t: float):
-        """Wire up a fresh SequenceRunner for `foot` and call start()."""
+        """Wire up a fresh SequenceRunner for `foot` using a typed PhaseContext."""
         nonlocal runner
-        runner = SequenceRunner(SEQUENCES[seq_name])
-        ee_home = ik.ee_pos(data, foot).copy()
+        runner   = SequenceRunner(SEQUENCES[seq_name])
+        ee_home  = ik.ee_pos(data, foot).copy()
         ik._ori_target_rot = None   # reset cached orientation for new foot
-        runner.start(t, {
-            'foot':              foot,
-            'ee_home':           ee_home,
-            'ee_pos_fn':         lambda: ik.ee_pos(data, swing_foot_ref[0]),
-            'hip_pivot_fn':      lambda: data.xanchor[hip_jid_ref[0]].copy(),
-            'wall_dist_fn':      _wall_dist_fn,
-            'magnet_disable_fn': lambda: swing_off.add(swing_mag_bid_ref[0]),
-            'magnet_enable_fn':  lambda: swing_off.discard(swing_mag_bid_ref[0]),
-        })
+        ctx = PhaseContext(
+            foot=foot,
+            ee_home=ee_home,
+            ee_pos_fn=lambda: ik.ee_pos(data, swing_foot_ref[0]),
+            hip_pivot_fn=lambda: data.xanchor[hip_jid_ref[0]].copy(),
+            wall_dist_fn=_wall_dist_fn,
+            magnet_disable_fn=lambda: swing_off.add(swing_mag_bid_ref[0]),
+            magnet_enable_fn=lambda: swing_off.discard(swing_mag_bid_ref[0]),
+        )
+        runner.start(t, ctx)
         print(f"\n── starting {seq_name} for {foot} ──  phases={len(SEQUENCES[seq_name])}")
 
-    # ── sim step ───────────────────────────────────────────────────────────
+    # ── sim step ───────────────────────────────────────────────────────────────
     def sim_step():
-        nonlocal ctrl_targets, settled, target_pos, face_axis, last_print
+        nonlocal ctrl_targets, settled, ik_target, last_print
         t = data.time
 
         data.xfrc_applied[:] = 0
         if args.magnets and settled:
             apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, off_mids=swing_off)
 
+        # ── settle phase ───────────────────────────────────────────────────────
         if t < SETTLE_TIME:
             data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
             mujoco.mj_step(model, data)
@@ -545,48 +515,60 @@ def main():
                 print(f"[diag] EE local +X at settle: "
                       f"{data.xmat[ik.ee_bids[_swing_foot()]].reshape(3,3)[:,0].round(3)}")
                 _start_runner_for(_swing_foot(), _first_seq, t)
-                target_pos = ik.ee_pos(data, _swing_foot()).copy()
+                ik_target = IKTarget.position_only(ik.ee_pos(data, _swing_foot()).copy())
 
-        # ── dual-leg transition: FL done → launch FR ───────────────────────
+        # ── dual-leg transition: FL planted → launch FR ────────────────────────
         if _is_dual and not fr_started[0]:
             ph = runner.current_phase
-            # F2W_REACH is unbounded (holds forever), so runner.done never fires.
-            # Instead: declare FL planted once the reach phase has dwelt long enough.
-            # By this point the magnet is on and the foot is stuck to the wall.
             fl_planted = (
-                runner.done  # fires if sequence somehow has a finite last phase
+                runner.done
                 or (ph is not None
                     and ph.name == "F2W_REACH"
                     and (data.time - runner.phase_t0) >= DUAL_REACH_DWELL)
             )
             if fl_planted:
                 fr_started[0] = True
-                runner.force_complete()          # freeze FL target; IK will lock it as stance
-                # Re-snapshot stance so FL's new wall position+orientation is locked in.
+                runner.force_complete()
                 ik.record_stance(data)
-                ik.lock_stance_orientation(data, "FL")   # hold FL's wall-face orientation
-                # Switch active foot to FR.
+                ik.lock_stance_orientation(data, "FL")
                 swing_foot_ref[0]    = "FR"
-                hip_jid_ref[0]       = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "hip_pitch_FR")
-                new_fr_mag           = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "electromagnet_FR")
+                hip_jid_ref[0]       = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT,
+                                                          "hip_pitch_FR")
+                new_fr_mag           = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY,
+                                                          "electromagnet_FR")
                 swing_mag_bid_ref[0] = new_fr_mag
                 swing_off.clear()
                 swing_off.add(new_fr_mag)
                 _start_runner_for("FR", _second_seq, t)
 
+        # ── wall_feet tracking ─────────────────────────────────────────────────
+        if _is_dual and fr_started[0] and "FL" not in wall_feet:
+            wall_feet.add("FL")
+            wall_baselines["FL"] = ik.ee_pos(data, "FL").copy()
+
+        if _is_dual and fr_started[0] and "FR" not in wall_feet:
+            ph = runner.current_phase
+            if ph is not None and ph.name == "F2W_REACH":
+                if _fr_reach_t0[0] is None:
+                    _fr_reach_t0[0] = t
+                if (t - _fr_reach_t0[0]) >= DUAL_REACH_DWELL:
+                    wall_feet.add("FR")
+                    wall_baselines["FR"] = ik.ee_pos(data, "FR").copy()
+            else:
+                _fr_reach_t0[0] = None
+
+        # ── IK solve ───────────────────────────────────────────────────────────
         if not args.no_ik:
             ik_counter[0] += 1
             if ik_counter[0] >= IK_EVERY_N:
                 ik_counter[0] = 0
                 sf = _swing_foot()
-                target_pos, face_axis, pos_cost, ori_cost = runner.step(t, {
-                    'ee_pos_fn':    lambda: ik.ee_pos(data, swing_foot_ref[0]),
-                    'hip_pivot_fn': lambda: data.xanchor[hip_jid_ref[0]].copy(),
-                })
-                ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP,
-                                        face_axis=face_axis,
-                                        position_cost=pos_cost, orientation_cost=ori_cost,
-                                        swing_foot=sf)
+                ik_target = runner.step(
+                    t,
+                    ee_pos_fn=lambda: ik.ee_pos(data, swing_foot_ref[0]),
+                    hip_pivot_fn=lambda: data.xanchor[hip_jid_ref[0]].copy(),
+                )
+                ctrl_targets = ik.solve(ik_target, data, IK_EVERY_N * TIMESTEP, swing_foot=sf)
 
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
         mujoco.mj_step(model, data)
@@ -604,16 +586,16 @@ def main():
         bar = "█" * int(pct * _BAR_WIDTH) + "░" * (_BAR_WIDTH - int(pct * _BAR_WIDTH))
 
         actual  = ik.ee_pos(data, sf)
-        diff    = (actual - target_pos) * 1000
+        diff    = (actual - ik_target.position) * 1000
         pos_str = (f"  pos_err={np.linalg.norm(diff):5.1f}mm"
                    f"  (Δx={diff[0]:+5.1f} Δy={diff[1]:+5.1f} Δz={diff[2]:+5.1f})"
-                   if target_pos is not None else "  pos=unconstrained")
+                   if ik_target is not None else "  pos=unconstrained")
 
         ori_str = ""
-        if face_axis is not None:
+        if ik_target.face_axis is not None:
             ee_neg_y = -data.xmat[ik.ee_bids[sf]].reshape(3, 3)[:, 1]
-            ang      = np.degrees(np.arccos(np.clip(
-                np.dot(ee_neg_y, face_axis / np.linalg.norm(face_axis)), -1., 1.)))
+            fa_norm  = ik_target.face_axis / np.linalg.norm(ik_target.face_axis)
+            ang      = np.degrees(np.arccos(np.clip(np.dot(ee_neg_y, fa_norm), -1., 1.)))
             ori_str  = f"  ang_to_goal={ang:5.1f}°"
 
         worst_d, worst_f = 0., ""
@@ -628,7 +610,17 @@ def main():
               f"  stance={worst_f}/{worst_d:.1f}mm"
               f"  mag={'OFF' if cur_mag_bid in swing_off else 'ON '}")
 
-    # ── run loop ───────────────────────────────────────────────────────────
+        foot_surfaces = _foot_surfaces(_swing_foot(), wall_feet)
+        pen_data      = _read_surface_penetration(data, ik, foot_surfaces, wall_baselines)
+        for foot in FEET:
+            surf, contact, pen_m = pen_data[foot]
+            role    = "SWING" if surf == 'swing' else surf.upper()
+            c_sym   = "●" if contact else "○"
+            pen_str = f"pen={pen_m*1000:5.2f}mm" if surf != 'swing' else "airborne    "
+            flag    = " ◄" if foot == sf else ""
+            print(f"         {foot} [{role:<5}]  contact={c_sym}  {pen_str}{flag}")
+
+    # ── run loop ───────────────────────────────────────────────────────────────
     if args.headless:
         while data.time < args.duration:
             sim_step()
@@ -657,7 +649,8 @@ def main():
                 for _ in range(steps_per_frame):
                     sim_step()
             draw_markers(viewer, model, data, ik, joint_vis,
-                         args, settled, target_pos, face_axis, swing_off,
+                         args, settled, ik_target.position,
+                         ik_target.face_axis, swing_off,
                          _swing_mag_bid(), _swing_foot())
             viewer.sync()
             elapsed = time.perf_counter() - frame_start
