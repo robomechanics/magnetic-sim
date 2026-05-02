@@ -35,4 +35,8 @@ optimization_results_*.csv
 
 # IDE
 .vscode/
+<<<<<<< HEAD
 .idea/
+=======
+.idea/
+>>>>>>> MWC_Nathan

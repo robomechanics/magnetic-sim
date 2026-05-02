@@ -34,31 +34,20 @@ TELEMETRY_INTERVAL = 0.5
 #     'max_force_per_wheel':   917.216,
 # }
 
-# # Optimized params to avoid slipping
-PARAMS = {
-    'ground_friction':       [0.054176, 0.181922, 7.4833e-06],
-    'solref':                [0.00854906, 10.0],
-    'solimp':                [0.153179, 0.9999, 0.000654778, 0.417417, 3.69318],
-    'noslip_iterations':     30,
-    'noslip_tolerance':      7.13222e-05,
-    'margin':                0.00388617,
-    'Br':                    1.78509,
-    'max_magnetic_distance': 0.0816543,
-    'max_force_per_wheel':   803.941,
-}
-
-# # Hybrid opt. (floor + wall feet) config params (wallopt)
+# # Optimized params to avoid slipping （near stable)
 # PARAMS = {
-#     'ground_friction':       [0.159078, 0.00253787, 4.83824e-05],
-#     'solref':                [0.00422619, 10.0],
-#     'solimp':                [0.589415, 0.9999, 0.00047689, 0.406926, 4.43535],
+#     'ground_friction':       [0.054176, 0.181922, 7.4833e-06],
+#     'solref':                [0.00854906, 10.0],
+#     'solimp':                [0.153179, 0.9999, 0.000654778, 0.417417, 3.69318],
 #     'noslip_iterations':     30,
-#     'noslip_tolerance':      2.43273e-05,
-#     'margin':                0.005,
-#     'Br':                    1.84583,
-#     'max_magnetic_distance': 0.0266489,
-#     'max_force_per_wheel':   1100,
+#     'noslip_tolerance':      7.13222e-05,
+#     'margin':                0.00388617,
+#     'Br':                    1.78509,
+#     'max_magnetic_distance': 0.0816543,
+#     'max_force_per_wheel':   803.941,
 # }
+
+
 
 # Full vert opt. config
 # PARAMS = {
@@ -73,6 +62,18 @@ PARAMS = {
 #     'max_force_per_wheel':   1064.52,
 # }
 
+# Hybrid opt. (floor + wall + pulloff) config params (wallopt), 800 N min
+PARAMS = {
+    'ground_friction':       [0.0301618, 1.21529, 0.000795251],
+    'solref':                [0.00158533, 10.0],
+    'solimp':                [0.0617254, 0.9999, 8.34648e-05, 0.975826, 5.23076],
+    'noslip_iterations':     49,
+    'noslip_tolerance':      6.29707e-06,
+    'margin':                0.00447619,
+    'Br':                    1.88339,
+    'max_magnetic_distance': 0.0575282,
+    'max_force_per_wheel':   800.676,
+}
 JOINT_DAMPING  = 5.0
 JOINT_ARMATURE = 0.05
 SERVO_KP       = 200.0

@@ -5,8 +5,6 @@ Usage:
     python viewer.py --rank 1 --duration 10.0
 """
 
-from pyexpat import model
-from xml.parsers.expat import model
 import mujoco
 import mujoco.viewer
 import numpy as np

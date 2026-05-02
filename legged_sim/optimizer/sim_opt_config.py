@@ -2,9 +2,8 @@
 sim_opt_config.py — configuration for the sim lift optimizer.
 
 Cost (lower = better):
-  50% — mean absolute Z drift of body during lift hold
-  25% — mean absolute X drift
-  25% — mean absolute Y drift
+  65% — mean XYZ drift norm of stance feet (FR/BL/BR) during lift hold
+  35% — mean downward (-Z) sag of stance feet during lift hold
 """
 
 from skopt.space import Real
@@ -32,7 +31,7 @@ space: list = [
     Real(0.0,   0.005, "uniform",     name="margin"),
     Real(0.5,   2.0,   "log-uniform", name="Br"),
     Real(0.012, 0.1,   "log-uniform", name="max_magnetic_distance"),
-    Real(800.0, 1100,  "log-uniform", name="max_force_per_wheel"),
+    Real(800.0, 1500,  "log-uniform", name="max_force_per_wheel"),
 ]
 
 # ── Default / warm-start params ───────────────────────────────────────────────
@@ -78,21 +77,20 @@ def point_to_params(point: list) -> dict:
 
 # ── Cost function ─────────────────────────────────────────────────────────────
 
-def calculate_cost(mean_abs_x: float, mean_abs_y: float, mean_abs_z: float) -> dict:
+def calculate_cost(mean_norm: float, mean_neg_z: float) -> dict:
     """
     Weighted body drift cost during lift hold.
-      50% Z, 25% X, 25% Y  (all in metres)
+
+      65% — mean XYZ drift norm of FR/BL/BR stance feet (metres)
+      35% — mean downward (-Z) sag of FR/BL/BR stance feet (metres)
     """
-    x_cost = 0.25 * mean_abs_x
-    y_cost = 0.25 * mean_abs_y
-    z_cost = 0.50 * mean_abs_z
-    total  = x_cost + y_cost + z_cost
+    norm_cost  = 0.65 * mean_norm
+    neg_z_cost = 0.35 * mean_neg_z
+    total      = norm_cost + neg_z_cost
     return {
-        "total_cost": total,
-        "x_drift":    mean_abs_x,
-        "y_drift":    mean_abs_y,
-        "z_drift":    mean_abs_z,
-        "x_cost":     x_cost,
-        "y_cost":     y_cost,
-        "z_cost":     z_cost,
+        "total_cost":  total,
+        "mean_norm":   mean_norm,
+        "mean_neg_z":  mean_neg_z,
+        "norm_cost":   norm_cost,
+        "neg_z_cost":  neg_z_cost,
     }

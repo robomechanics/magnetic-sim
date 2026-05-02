@@ -1,0 +1,256 @@
+from math import dist
+from xml.parsers.expat import model
+import mujoco
+import mujoco.viewer
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+from copy import deepcopy
+import imageio.plugins.ffmpeg
+
+
+from optimizer_sim.backup_04_22.config import MODES, DEFAULT_MODE, DEFAULT_PARAMS
+
+# Magnetic constants
+MU_0 = 4 * np.pi * 1e-7  # Magnetic permeability of free space (H/m)
+MAGNET_VOLUME = np.pi * (0.025**2) * 0.013  # Cylinder: r=0.025m, h=0.013m
+# MAX_FORCE_PER_WHEEL = 50.0  # N
+
+
+
+def calculate_magnetic_force(distance, Br, V, MU_0):
+    """Compute magnetic attraction force using dipole-dipole approximation."""
+    if distance <= 0.0:
+        return 0.0
+    m = (Br * V) / MU_0
+    return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * distance) ** 4)
+
+def run_simulation(params, mjcf_path="XML/scene.xml", sim_duration=None, visualize=False, mode=None):
+    """
+    Runs a MuJoCo simulation with given parameters and returns the trajectory.
+    
+    Returns:
+        list or None: Trajectory data or None if unstable.
+    """
+    # If visualization requested, delegate to viewer module
+    if visualize:
+        import viewer
+        viewer.visualize_simulation(params, sim_duration, mode=mode)
+        return None
+    
+    # Mode config
+    if mode is None:
+        mode = DEFAULT_MODE
+    mode_cfg = MODES[mode]
+    if sim_duration is None:
+        sim_duration = mode_cfg["sim_duration"]
+
+    # Otherwise run headless simulation
+    model = mujoco.MjModel.from_xml_path(mjcf_path)
+
+    # Apply parameters
+    wall_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "wall_geom")
+    if 'ground_friction' in params:
+        model.geom_friction[wall_id] = params['ground_friction']
+        
+    if 'solref' in params:
+        model.opt.o_solref = params['solref']
+        
+    if 'solimp' in params:
+        model.opt.o_solimp = params['solimp']
+
+    if 'noslip_iterations' in params:
+        model.opt.noslip_iterations = params['noslip_iterations']
+
+    if 'rocker_stiffness' in params and 'rocker_damping' in params:
+        rocker_joints = ['right_hinge', 'left_hinge', 'BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
+        for joint_name in rocker_joints:
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            if joint_id != -1:
+                model.jnt_stiffness[joint_id] = params['rocker_stiffness']
+                model.dof_damping[model.jnt_dofadr[joint_id]] = params['rocker_damping']
+
+    if 'wheel_kp' in params:
+        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+        for act_name in wheel_actuators:
+            act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+            if act_id != -1:
+                model.actuator_gainprm[act_id, 0] = params['wheel_kp']
+                model.actuator_biasprm[act_id, 1] = -params['wheel_kp']  # ADD THIS LINE!
+
+    if 'wheel_kv' in params:
+        wheel_actuators = ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']
+        for act_name in wheel_actuators:
+            act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+            if act_id != -1:
+                model.actuator_biasprm[act_id, 2] = -params['wheel_kv']
+
+    # Get parameters for magnetic force
+    Br = params['Br']
+    max_magnetic_distance = params['max_magnetic_distance']
+
+    model.opt.timestep = 1./1e3
+    model.opt.enableflags |= 1 << 0
+    model.opt.iterations = 100  # Increase from default 50
+    model.opt.tolerance = 1e-8  # Tighter convergence
+
+    data = mujoco.MjData(model)
+    data.qpos[0] = 0.035              # X = 35mm from wall
+    data.qpos[1] = 0.0                # Y = centered
+    data.qpos[2] = 0.35               # Z = height along wall
+    data.qpos[3:7] = [-0.707, 0, 0.707, 0]  # Rotated to face wall
+    # data.qpos[3:7] = [0, -0.707, 0, 0.707]  # Rotated to face wall + 180° yaw flip
+
+    settle_time = mode_cfg["settle_time"]
+    trajectory = []
+    
+
+
+    # Get all sampling sphere geoms (24 per wheel = 96 total)
+    wheel_gids = []
+    for wheel_prefix in ['BR', 'FR', 'BL', 'FL']:
+        # Find the wheel_geom body
+        body_name = f"{wheel_prefix}_wheel_geom"
+        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body_id == -1:
+            continue
+        
+        # Get all geoms in this body
+        for geom_id in range(model.ngeom):
+            if model.geom_bodyid[geom_id] == body_id:
+                if model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_SPHERE:
+                    wheel_gids.append(geom_id)
+    
+    # Collect wheel actuator IDs for velocity control
+    wheel_act_ids = []
+    for act_name in ['BR_wheel_motor', 'FR_wheel_motor', 'BL_wheel_motor', 'FL_wheel_motor']:
+        act_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, act_name)
+        if act_id != -1:
+            wheel_act_ids.append(act_id)
+
+    fromto = np.zeros(6)
+
+    try:
+        mujoco.mj_step(model, data)
+
+        # Set wheels sideways and apply high stiffness to pivot joints to prevent flipping
+        pivot_joints = ['BR_pivot', 'FR_pivot', 'BL_pivot', 'FL_pivot']
+        for joint_name in pivot_joints:
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            if joint_id != -1:
+                data.qpos[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
+                model.jnt_stiffness[joint_id] = 1000.0  # CHANGE: hardcode to 1000
+                model.qpos_spring[model.jnt_qposadr[joint_id]] = mode_cfg["pivot_angle"]
+
+
+        def simulation_step():
+            data.xfrc_applied[:] = 0.0 
+            
+            wheel_forces = {}  # body_id -> accumulated fvec
+            for gid in wheel_gids:
+                if gid == -1 or gid >= model.ngeom:
+                    continue
+                dist = mujoco.mj_geomDistance(model, data, gid, wall_id, 50, fromto)
+                if dist < 0 or dist > max_magnetic_distance:
+                    continue
+                fmag = calculate_magnetic_force(dist, Br, MAGNET_VOLUME, MU_0)
+                n = fromto[3:6] - fromto[0:3]
+                norm = np.linalg.norm(n)
+                if norm < 1e-10:
+                    continue
+                bid = model.geom_bodyid[gid]
+                wheel_forces[bid] = wheel_forces.get(bid, np.zeros(3)) + fmag * (n / norm)
+
+            for bid, fvec in wheel_forces.items():
+                total_mag = np.linalg.norm(fvec)
+                if total_mag > params['max_force_per_wheel']:
+                    fvec *= params['max_force_per_wheel'] / total_mag
+                data.xfrc_applied[bid, :3] += fvec
+            # Actuator control for velocity mode
+            # if mode_cfg["actuator_mode"] == "velocity":
+            #     for act_id in wheel_act_ids:
+            #         data.ctrl[act_id] = mode_cfg["actuator_target_rads"] * dt # Large but fixed position offset
+            # else:
+            #     for act_id in wheel_act_ids:
+            #         data.ctrl[act_id] = mode_cfg["actuator_target"]
+
+            # Actuator control
+            if mode_cfg["actuator_mode"] == "velocity":
+                for act_id in wheel_act_ids:
+                    data.ctrl[act_id] = mode_cfg["actuator_target_rads"]
+            else:
+                for act_id in wheel_act_ids:
+                    data.ctrl[act_id] = 0.0
+
+            if np.any(np.abs(data.qvel) > 100.0):  # Any velocity > 100 m/s
+                raise ValueError("Simulation unstable: Excessive velocities.")
+
+            mujoco.mj_step(model, data)
+
+            # Check for instability (non-finite values or solver failures)
+            if not np.all(np.isfinite(data.qacc)):
+                raise ValueError("Simulation unstable: Non-finite accelerations.")
+            
+            if (data.solver_niter >= model.opt.iterations).any():
+                raise ValueError("Simulation unstable: Solver iteration limit.")
+
+            if not np.isfinite(data.solver_fwdinv[0]):
+                raise ValueError("Simulation unstable: Non-finite solver values.")
+
+            trajectory.append({
+                'time': data.time,
+                'pos': data.qpos[:3].copy(),
+                'vel': data.qvel[:3].copy(),
+                'quat': data.xquat[1].copy()
+            })
+
+        while data.time < sim_duration:
+            simulation_step()
+
+    except ValueError as e:
+        if "Simulation unstable" in str(e):
+            print(f"  Simulation failed: {e}")
+            return None
+        raise e
+
+    if not trajectory or not np.all(np.isfinite([d['pos'][0] for d in trajectory])):
+        print("Warning: Invalid trajectory.")
+        return None
+        
+    return trajectory
+
+if __name__ == "__main__":
+    # Raw default
+    # default_params = {
+    #     'ground_friction': [0.95, 0.01, 0.01],
+    #     'solref': [0.0004, 25.0],
+    #     'solimp': [0.9, 0.95, 0.001, 0.5, 1.0],
+    #     'noslip_iterations': 15,
+    #     'rocker_stiffness': 30.0,
+    #     'rocker_damping': 1.0,
+    #     'wheel_kp': 10.0,
+    #     'wheel_kv': 1.0,
+    #     'Br': 1.48
+    # }
+
+    # Optimized hold default
+    default_params = DEFAULT_PARAMS
+
+
+    
+    mode = DEFAULT_MODE
+    print(f"Running simulation (mode={mode})...")
+    trajectory = run_simulation(default_params, visualize=True, mode=mode)
+
+    if trajectory:
+        settle_time = MODES[mode]["settle_time"]
+        start_idx = next((i for i, s in enumerate(trajectory) if s['time'] >= settle_time), 0)
+        
+        total_movement = sum(
+            np.linalg.norm(trajectory[i]['pos'] - trajectory[i-1]['pos'])
+            for i in range(start_idx + 1, len(trajectory))
+        )
+
+        print(f"Total movement: {total_movement:.6f} m")
+        print(f"Cost: {total_movement:.6f}")
+    else:
+        print("Simulation failed.")

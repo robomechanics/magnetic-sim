@@ -1,23 +1,22 @@
 """
-sim_opt_sim.py — headless wall-hold runner for the sim optimizer.
+sim_vertopt_sim.py — headless wall FL-lift runner for the vert optimizer.
 
 Runs:
-  Phase 1: settle (2 s, all magnets ON, all joints hold bake pose)
-  Phase 2: hold   (3 s, all magnets ON, all joints hold bake pose)
+  Phase 1: settle (2 s, all magnets ON, all joints hold bake pose on wall)
+  Phase 2: lift FL 10 cm and hold (3 s, FL magnet OFF, stance magnets ON)
 
-The robot is spawned on the vertical wall (inner face at X=0.500) via the
-"wall_spawn" keyframe defined in scene_vert_opt.xml.  No foot is lifted; no IK is
-run.  The PID simply holds the post-bake joint angles for the full 5 s.
+Mirrors sim_opt_sim.py exactly but the robot is spawned on the vertical wall.
+Gravity now acts sideways (-Z world), so the 3 stance magnets must resist
+both pull-off and gravity-direction slip while FL is in the air.
 
 Slip metric (returned as mean_abs_x/y/z, lower = better):
-  X — mean absolute X drift of all 4 EE bodies from their settle position
-      (positive = pulling away from wall; magnets resist this).
-  Y — mean absolute lateral drift of all 4 EE bodies (side-to-side slip).
-  Z — mean absolute vertical drift of all 4 EE bodies (gravity-direction
-      slip; most critical for wall climbing).
+  X — mean |X drift| of FR/BL/BR EEs (pull-off from wall).
+  Y — mean |Y drift| of FR/BL/BR EEs (lateral slip).
+  Z — mean |Z drift| of FR/BL/BR EEs (gravity-direction drop).
+  Sampled over [SETTLE_TIME + LIFT_MEASURE_START, total_time].
 
-These feed directly into calculate_cost() in sim_opt_config.py:
-  total = 0.50 * Z  +  0.25 * X  +  0.25 * Y
+These feed into calculate_cost() in sim_vertopt_config.py:
+  total = 0.50 * X  +  0.50 * Z  +  0.00 * Y
 """
 
 import os
@@ -41,15 +40,23 @@ from config import (
     KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
 )
 
+# Reuse IK solver from floor sim — works identically on wall
+from sim_opt_sim import _IK
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-FEET = ('FL', 'FR', 'BL', 'BR')
+FEET       = ('FL', 'FR', 'BL', 'BR')
+SWING_FOOT = 'FL'
 
-SETTLE_TIME         = 2.0   # s — all magnets ON, hold bake pose
-HOLD_TIME           = 3.0   # s — continue holding; sample drift here
-HOLD_MEASURE_START  = 0.5   # s into hold before sampling (skip transient)
+SETTLE_TIME        = 2.0   # s — all magnets ON, hold bake pose
+LIFT_HOLD          = 3.0   # s — FL lifted, FL magnet OFF, stance magnets ON
+LIFT_MEASURE_START = 1.0   # s into lift before sampling (skip foot-travel transient)
+LIFT_DZ            = 0.10  # m — how high to lift FL
 
-# Wall-spawn keyframe name (must match scene.xml)
+IK_DAMPING  = 1e-3
+IK_EVERY_N  = 10    # IK at 200 Hz, physics at 2000 Hz
+
+# Wall-spawn keyframe name (must match scene_vert_opt.xml)
 WALL_SPAWN_KEY = "wall_spawn"
 
 PID_KP      = 500.0
@@ -65,10 +72,14 @@ def _mag_force(dist: float, Br: float) -> float:
     return (3 * MU_0 * m ** 2) / (2 * np.pi * (2 * dist) ** 4)
 
 
-def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params):
-    """Apply magnetic attraction from all magnets to the nearest steel plate."""
+def _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params, off_mids=None):
+    """Apply magnetic attraction from active magnets to the nearest steel plate."""
+    if off_mids is None:
+        off_mids = set()
     _fromto = np.zeros(6)
     for mid in magnet_ids:
+        if mid in off_mids:
+            continue
         fvec = np.zeros(3)
         for gid in sphere_gids[mid]:
             best_dist, best_fromto = np.inf, None
@@ -172,77 +183,123 @@ class _PID:
         return torques
 
 
-# ── Headless wall-hold runner ─────────────────────────────────────────────────
+# ── Headless wall FL-lift runner ──────────────────────────────────────────────
 
 def run_headless_lift(params: dict) -> tuple[float, float, float]:
     """
-    Spawn on wall, all magnets ON throughout, hold joint positions.
+    Spawn on wall, settle, then lift FL — identical to floor sim but on wall.
 
     Phases:
       1. Settle (0 → SETTLE_TIME): all magnets ON, PID holds bake pose.
-      2. Hold   (SETTLE_TIME → total):
-            same control; sample EE drift from settle-end snapshot.
+      2. Lift   (SETTLE_TIME → total): FL raised LIFT_DZ, FL magnet OFF,
+                 IK holds target, stance magnets ON.
 
     Returns:
-        (mean_abs_x, mean_abs_y, mean_abs_z)
-          X — mean |X drift| of all 4 EE bodies (pull-off direction).
-          Y — mean |Y drift| of all 4 EE bodies (lateral slip).
-          Z — mean |Z drift| of all 4 EE bodies (gravity-direction slip).
-        All sampled over [SETTLE_TIME + HOLD_MEASURE_START, total_time].
+        (mean_abs_x, mean_abs_y, mean_abs_z) of FR/BL/BR EEs:
+          X — pull-off from wall.
+          Y — lateral slip (not penalised).
+          Z — gravity-direction drop (most critical on vertical wall).
+        Sampled over [SETTLE_TIME + LIFT_MEASURE_START, total_time].
     """
     model, data, plate_ids, magnet_ids, sphere_gids = _setup_model(params)
 
-    # Resolve EE body IDs for all four feet.
-    ee_bids = {
-        foot: mujoco.mj_name2id(
-            model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{foot}")
-        for foot in FEET
+    swing_mag_bid = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{SWING_FOOT}")
+
+    STANCE_FEET = [f for f in FEET if f != SWING_FOOT]
+    stance_ee_bids = {
+        foot: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{foot}")
+        for foot in STANCE_FEET
     }
 
+    # # ── Debug: verify magnet IDs and spawn gap ────────────────────────────────
+    # print(f"[DEBUG] swing_mag_bid     = {swing_mag_bid}"
+    #       f"  {'OK' if swing_mag_bid in magnet_ids else '*** NOT in magnet_ids — FL magnet will NOT turn off! ***'}")
+    # print(f"[DEBUG] magnet_ids        = {magnet_ids}")
+    # print(f"[DEBUG] stance_ee_bids    = {stance_ee_bids}")
+    # fl_x   = data.xpos[swing_mag_bid][0] if swing_mag_bid != -1 else float('nan')
+    # wall_x = 0.500  # inner face of wall geom from scene_vert_opt.xml
+    # gap    = wall_x - fl_x
+    # print(f"[DEBUG] FL ee world X     = {fl_x:.4f}m  |  wall face X = {wall_x:.4f}m  |  gap = {gap:.4f}m")
+    # print(f"[DEBUG] max_magnetic_dist = {params['max_magnetic_distance']:.4f}m"
+    #       f"  {'OK' if params['max_magnetic_distance'] >= gap else '*** TOO SHORT — magnets cannot reach wall from spawn! ***'}")
+    # # ─────────────────────────────────────────────────────────────────────────
+
+    ik  = _IK(model)
     pid = _PID(model)
 
-    # PID targets = post-bake joint angles (held for entire simulation).
     ctrl_targets = np.zeros(model.nu)
     for i in range(model.nu):
         jid = model.actuator_trnid[i, 0]
         ctrl_targets[i] = data.qpos[model.jnt_qposadr[jid]]
 
-    settled        = False
-    ee_baseline    = {}   # foot -> XYZ position at end of settle
-    xyz_samples    = []   # list of arrays shape (4, 3), one per timestep sampled
+    settled           = False
+    z_settle_baseline = {}
+    xy_lift_baseline  = {}
+    target_pos        = np.zeros(3)
+    ik_step_counter   = 0
+    xy_drift_samples  = []
+    z_drift_samples   = []
 
-    total_time    = SETTLE_TIME + HOLD_TIME
-    measure_start = SETTLE_TIME + HOLD_MEASURE_START
+    total_time    = SETTLE_TIME + LIFT_HOLD
+    measure_start = SETTLE_TIME + LIFT_MEASURE_START
 
     while data.time < total_time:
         t = data.time
 
-        # All magnets ON for the entire simulation.
+        # ── Phase 1: settle ───────────────────────────────────────────────────
+        if t < SETTLE_TIME:
+            data.xfrc_applied[:] = 0
+            _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
+            data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
+            mujoco.mj_step(model, data)
+            continue
+
+        # ── One-time snapshot at end of settle ────────────────────────────────
+        if not settled:
+            settled = True
+            ik.record_stance(data)
+            ee_home    = ik.ee_pos(data, SWING_FOOT).copy()
+            target_pos = ee_home + np.array([-LIFT_DZ, 0.0, 0.0])  # pull off wall in -X (wall normal)
+            for foot, bid in stance_ee_bids.items():
+                pos = data.xpos[bid].copy()
+                z_settle_baseline[foot] = pos[2]
+                xy_lift_baseline[foot]  = pos[:2].copy()
+
+        # ── Phase 2: lift hold ────────────────────────────────────────────────
         data.xfrc_applied[:] = 0
-        _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
+        _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids,
+                   params, off_mids={swing_mag_bid})
+
+        ik_step_counter += 1
+        if ik_step_counter >= IK_EVERY_N:
+            ik_step_counter = 0
+            ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP)
+
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
         mujoco.mj_step(model, data)
 
-        # ── One-time snapshot at end of settle ────────────────────────────────
-        if not settled and data.time >= SETTLE_TIME:
-            settled = True
-            for foot, bid in ee_bids.items():
-                ee_baseline[foot] = data.xpos[bid].copy()
+        if data.time < measure_start:
+            continue
 
-        # ── Sample drift during hold window ───────────────────────────────────
-        if settled and data.time >= measure_start:
-            drift = np.array([
-                np.abs(data.xpos[bid] - ee_baseline[foot])
-                for foot, bid in ee_bids.items()
-            ])  # shape (4, 3)
-            xyz_samples.append(drift)
+        z_drifts = np.array([
+            abs(data.xpos[bid][2] - z_settle_baseline[foot])
+            for foot, bid in stance_ee_bids.items()
+        ])
+        z_drift_samples.append(z_drifts.mean())
 
-    if not xyz_samples:
+        xy_drifts = np.array([
+            np.abs(data.xpos[bid][:2] - xy_lift_baseline[foot])
+            for foot, bid in stance_ee_bids.items()
+        ])
+        xy_drift_samples.append(xy_drifts.mean(axis=0))
+
+    if not z_drift_samples:
         return 0.0, 0.0, 0.0
 
-    arr = np.array(xyz_samples)         # shape (N, 4, 3)
-    mean_per_axis = arr.mean(axis=(0, 1))  # shape (3,)  mean over time and feet
-    return float(mean_per_axis[0]), float(mean_per_axis[1]), float(mean_per_axis[2])
+    z_arr  = np.array(z_drift_samples)
+    xy_arr = np.array(xy_drift_samples)
+    return float(xy_arr.mean(axis=0)[0]), float(xy_arr.mean(axis=0)[1]), float(z_arr.mean())
 
 
 # ── Interactive viewer ────────────────────────────────────────────────────────
@@ -258,14 +315,11 @@ def _key_callback(keycode):
 
 def run_with_viewer(params: dict) -> None:
     """
-    Re-run the wall-hold scenario with a live MuJoCo viewer.
+    Re-run the wall FL-lift scenario with a live MuJoCo viewer.
 
     Controls:
       SPACE / ENTER — pause / resume
       RIGHT ARROW   — step one physics frame while paused
-      (starts paused so you can inspect the spawn pose first)
-
-    The viewer stays open after the sim ends; close the window to exit.
     """
     import time
     import mujoco.viewer as mjviewer
@@ -275,26 +329,35 @@ def run_with_viewer(params: dict) -> None:
 
     model, data, plate_ids, magnet_ids, sphere_gids = _setup_model(params)
 
-    ee_bids = {
-        foot: mujoco.mj_name2id(
-            model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{foot}")
-        for foot in FEET
+    swing_mag_bid = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{SWING_FOOT}")
+
+    STANCE_FEET = [f for f in FEET if f != SWING_FOOT]
+    stance_ee_bids = {
+        foot: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"electromagnet_{foot}")
+        for foot in STANCE_FEET
     }
 
+    ik  = _IK(model)
     pid = _PID(model)
+
     ctrl_targets = np.zeros(model.nu)
     for i in range(model.nu):
         jid = model.actuator_trnid[i, 0]
         ctrl_targets[i] = data.qpos[model.jnt_qposadr[jid]]
 
-    settled        = False
-    ee_baseline    = {}
-    xyz_samples    = []
+    settled           = False
+    z_settle_baseline = {}
+    xy_lift_baseline  = {}
+    target_pos        = np.zeros(3)
+    ik_step_counter   = 0
+    xy_drift_samples  = []
+    z_drift_samples   = []
 
-    total_time    = SETTLE_TIME + HOLD_TIME
-    measure_start = SETTLE_TIME + HOLD_MEASURE_START
+    total_time    = SETTLE_TIME + LIFT_HOLD
+    measure_start = SETTLE_TIME + LIFT_MEASURE_START
 
-    print("Viewer ready — press SPACE to start, RIGHT ARROW to step while paused.")
+    print("Wall FL-lift viewer — press SPACE to start, RIGHT ARROW to step while paused.")
 
     with mjviewer.launch_passive(model, data, key_callback=_key_callback) as viewer:
         viewer.cam.lookat[:] = [0.3, 0.0, 0.5]
@@ -305,47 +368,66 @@ def run_with_viewer(params: dict) -> None:
         step_start = time.perf_counter()
 
         while viewer.is_running():
-            # ── Paused: just sync and idle ─────────────────────────────────
             if _key_state["paused"] and not _key_state["step_once"]:
                 viewer.sync()
                 time.sleep(0.02)
                 continue
             _key_state["step_once"] = False
 
-            # ── Physics step ───────────────────────────────────────────────
-            if data.time < total_time:
+            if data.time < SETTLE_TIME:
                 data.xfrc_applied[:] = 0
                 _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids, params)
                 data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
                 mujoco.mj_step(model, data)
 
-                if not settled and data.time >= SETTLE_TIME:
+            elif data.time < total_time:
+                if not settled:
                     settled = True
-                    for foot, bid in ee_bids.items():
-                        ee_baseline[foot] = data.xpos[bid].copy()
+                    ik.record_stance(data)
+                    ee_home    = ik.ee_pos(data, SWING_FOOT).copy()
+                    target_pos = ee_home + np.array([-LIFT_DZ, 0.0, 0.0])  # pull off wall in -X (wall normal)
+                    for foot, bid in stance_ee_bids.items():
+                        pos = data.xpos[bid].copy()
+                        z_settle_baseline[foot] = pos[2]
+                        xy_lift_baseline[foot]  = pos[:2].copy()
 
-                if settled and data.time >= measure_start:
-                    drift = np.array([
-                        np.abs(data.xpos[bid] - ee_baseline[foot])
-                        for foot, bid in ee_bids.items()
+                data.xfrc_applied[:] = 0
+                _apply_mag(model, data, sphere_gids, plate_ids, magnet_ids,
+                           params, off_mids={swing_mag_bid})
+
+                ik_step_counter += 1
+                if ik_step_counter >= IK_EVERY_N:
+                    ik_step_counter = 0
+                    ctrl_targets = ik.solve(target_pos, data, IK_EVERY_N * TIMESTEP)
+
+                data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
+                mujoco.mj_step(model, data)
+
+                if data.time >= measure_start:
+                    z_drifts = np.array([
+                        abs(data.xpos[bid][2] - z_settle_baseline[foot])
+                        for foot, bid in stance_ee_bids.items()
                     ])
-                    xyz_samples.append(drift)
+                    z_drift_samples.append(z_drifts.mean())
+                    xy_drifts = np.array([
+                        np.abs(data.xpos[bid][:2] - xy_lift_baseline[foot])
+                        for foot, bid in stance_ee_bids.items()
+                    ])
+                    xy_drift_samples.append(xy_drifts.mean(axis=0))
 
             viewer.sync()
-
-            # Pace to real time
             elapsed   = time.perf_counter() - step_start
             remaining = TIMESTEP - elapsed
             if remaining > 0:
                 time.sleep(remaining)
             step_start = time.perf_counter()
 
-        if xyz_samples:
-            arr = np.array(xyz_samples)
-            mean_per_axis = arr.mean(axis=(0, 1))
-            print(f"Viewer drift — x: {mean_per_axis[0]*1000:.2f}mm  "
-                  f"y: {mean_per_axis[1]*1000:.2f}mm  "
-                  f"z: {mean_per_axis[2]*1000:.2f}mm")
+        if z_drift_samples:
+            z_arr  = np.array(z_drift_samples)
+            xy_arr = np.array(xy_drift_samples)
+            print(f"Viewer drift — x: {xy_arr.mean(axis=0)[0]*1000:.2f}mm  "
+                  f"y: {xy_arr.mean(axis=0)[1]*1000:.2f}mm  "
+                  f"z: {z_arr.mean()*1000:.2f}mm")
 
 
 if __name__ == "__main__":
@@ -370,7 +452,7 @@ if __name__ == "__main__":
         print(f"Launching viewer with params from {args.view}")
         run_with_viewer(params)
     else:
-        from sim_opt_config import PARAMS
+        from sim_vertopt_config import PARAMS
         print("Running single wall-hold trial with default PARAMS...")
         x, y, z = run_headless_lift(PARAMS)
         print(f"mean drift — x: {x*1000:.2f}mm  y: {y*1000:.2f}mm  z: {z*1000:.2f}mm")

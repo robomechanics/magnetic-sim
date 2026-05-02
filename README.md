@@ -363,4 +363,8 @@ t= 8.2  [████████░░░░] FL/F2W_RE  72.3%  pos_err= 4.1mm 
 
 ---
 
+<<<<<<< HEAD
 Research focus: contact-aware control, physics-consistent simulation, and locomotion planning for multi-surface magnetic wall-climbing robots.
+=======
+Research focus: contact-aware control, physics-consistent simulation, and locomotion planning for multi-surface magnetic wall-climbing robots.
+>>>>>>> MWC_Nathan

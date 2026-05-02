@@ -6,7 +6,7 @@ Usage: python replay.py [--rank RANK] [--duration DURATION] [--mode MODE]
 import csv
 import argparse
 import viewer
-from config import DEFAULT_MODE, DEFAULT_PARAMS
+from optimizer_sim.backup_04_22.config import DEFAULT_MODE, DEFAULT_PARAMS
 
 def main():
     parser = argparse.ArgumentParser(description="Replay optimization result")
