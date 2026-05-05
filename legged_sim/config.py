@@ -90,16 +90,19 @@ DEMAGNETIZE_HOLD  = 0.10
 MAGNETIZE_HOLD    = 0.15
 
 # ── sequence selector ───────────────────────────────────────────────────
-# Options: "basic"    lift → swing → reach → drop
-#          "orient"   lift → swing → hold (EE face -X)
-#          "f2w"      lift → swing → hold +20 cm (EE face +X, wall dist logged)
-SEQUENCE = "f2w"
+# Options: "orient"     lift → swing → hold (EE face -X)
+#          "f2w"        FL: lift → swing → orient → measure → reach (+X wall)
+#                       Auto-handoff to "f2w_fr" once FL plants on the wall.
+#          "f2w_fr"     FR mirror of "f2w" (+45° swing instead of -45°).
+#          "f2w_test"   FL only: contracted lift (joint-keypoint test).
+#                       Drives knee/wrist/ee to CONTRACTED_POSE_FL, holds.
+SEQUENCE = "f2w_test"
 
 KNEE_GEOM_ZERO = {
-    'FL': np.array([ 0.07280,  0.07280, -0.04432]),
-    'FR': np.array([ 0.07280, -0.07280, -0.04432]),
-    'BL': np.array([-0.07280,  0.07280, -0.04432]),
-    'BR': np.array([-0.07280, -0.07280, -0.04432]),
+    'FL': np.array([ 0.10279,  0.10279, -0.06258]),
+    'FR': np.array([ 0.10279, -0.10279, -0.06258]),
+    'BL': np.array([-0.10279,  0.10279, -0.06258]),
+    'BR': np.array([-0.10279, -0.10279, -0.06258]),
 }
 KNEE_AXIS = {
     'FL': np.array([ 0.7071068, -0.7071068, 0.0]),
@@ -110,10 +113,10 @@ KNEE_AXIS = {
 KNEE_BAKE_DEG = {'FL': 0.0, 'FR': 0.0, 'BL': 0.0, 'BR': 0.0}
 
 WRIST_GEOM_ZERO = {
-    'FL': np.array([ 0.07425,  0.07425, -0.18187]),
-    'FR': np.array([ 0.07425, -0.07425, -0.18187]),
-    'BL': np.array([-0.07425,  0.07425, -0.18187]),
-    'BR': np.array([-0.07425, -0.07425, -0.18187]),
+    'FL': np.array([ 0.07091,  0.07091, -0.17369]),
+    'FR': np.array([ 0.07091, -0.07091, -0.17369]),
+    'BL': np.array([-0.07091,  0.07091, -0.17369]),
+    'BR': np.array([-0.07091, -0.07091, -0.17369]),
 }
 WRIST_AXIS = {
     'FL': np.array([ 0.7071068, -0.7071068, 0.0]),
@@ -123,8 +126,8 @@ WRIST_AXIS = {
 }
 WRIST_BAKE_DEG = {'FL': 0.0, 'FR': 0.0, 'BL': 0.0, 'BR': 0.0}
 
-EE_GEOM_ZERO = {leg: np.array([0.066, 0.0, 0.0]) for leg in ('FL', 'FR', 'BL', 'BR')}
-EM_POS_ZERO  = {leg: np.array([0.066075, 0.0, 0.0]) for leg in ('FL', 'FR', 'BL', 'BR')}
+EE_GEOM_ZERO = {leg: np.array([0.04866, 0.0, 0.0]) for leg in ('FL', 'FR', 'BL', 'BR')}
+EM_POS_ZERO  = {leg: np.array([0.04874, 0.0, 0.0]) for leg in ('FL', 'FR', 'BL', 'BR')}
 EE_AXIS = {
     'FL': np.array([0.0, -0.7071068,  0.7071068]),
     'FR': np.array([0.0, -0.7071068, -0.7071068]),
@@ -138,6 +141,79 @@ EM_QUAT_ZERO = {
     'BR': np.array([ 0.5,  0.5,  0.5, -0.5]),
 }
 EE_BAKE_DEG = {'FL': 0.0, 'FR': 0.0, 'BL': 0.0, 'BR': 0.0}
+
+
+# ── joint-space waypoints (universal joint-keypoint framework) ────────────────
+#
+# DONE: leg-agnostic helper for building a "contracted" joint-space waypoint
+#       used by lift_phase (and later swing/orient) in the f2w sequence.
+#
+# Status: FRAMEWORK VALIDATION MODE. All targets zeroed so the joint task
+#         engages but does nothing (joints already at 0 from settle, gradient
+#         is zero, no fight against the EE task). Use this to confirm
+#         f2w_test gives a clean 10 cm vertical lift. Once that works:
+#
+# TODO: replace the zeros with the real contracted-pose angles. Suggested
+#       staged tuning workflow — DO NOT jump straight to ±π/2 again, that
+#       failed because (a) my sign reasoning for the +X-Y-axis chain was
+#       wrong, and (b) joint_cost dominated position_cost so the leg locked
+#       to a bad pose with no Cartesian rescue.
+#
+#         (1) Set knee_FL = +0.3 rad (~17°), wrist/ee = 0.0. Run f2w_test.
+#             Watch the EE telemetry: which direction does it move?
+#             - EE Δx,Δy NEGATIVE → leg folding INWARD: correct sign, scale up.
+#             - EE Δx,Δy POSITIVE → leg unfolding OUTWARD: flip sign on knee.
+#         (2) Once knee sign is correct, scale to ±0.7 rad, then ±π/2.
+#         (3) Repeat for wrist (Z-fold = opposite sign to knee).
+#         (4) Repeat for ee (rotates magnet face, doesn't move body much).
+#         (5) Mirror correct signs to FR/BL/BR.
+#
+# Joint range reminder (robot.xml):
+#   hip_pitch_*: ±45°   knee_*: ±90°   wrist_*: ±90°   ee_*: ±90°
+#
+# Values are radians. _PI_2 = 90° = hard joint limit for knee/wrist/ee.
+_PI_2 = np.pi / 2
+
+CONTRACTED_POSE_FL = {
+    'hip_pitch_FL': 0.0,                  # anchored — prevents IK using hip as escape valve
+    'knee_FL':  +np.radians(90),          # + lifts lower leg in +Z
+    'wrist_FL': -np.radians(135),         # - Z-fold (limit expanded to ±135°)
+    'ee_FL':    -np.radians(75),          # - magnet face inward
+}
+CONTRACTED_POSE_FR = {
+    'knee_FR':  +_PI_2,    # TODO: mirror — confirm sign in viewer
+    'wrist_FR': -_PI_2,
+    'ee_FR':    -_PI_2,
+}
+CONTRACTED_POSE_BL = {
+    'knee_BL':  +_PI_2,    # TODO: mirror — confirm sign in viewer
+    'wrist_BL': -_PI_2,
+    'ee_BL':    -_PI_2,
+}
+CONTRACTED_POSE_BR = {
+    'knee_BR':  +_PI_2,    # TODO: mirror — confirm sign in viewer
+    'wrist_BR': -_PI_2,
+    'ee_BR':    -_PI_2,
+}
+
+_CONTRACTED_POSES = {
+    'FL': CONTRACTED_POSE_FL,
+    'FR': CONTRACTED_POSE_FR,
+    'BL': CONTRACTED_POSE_BL,
+    'BR': CONTRACTED_POSE_BR,
+}
+
+def contracted_pose(foot: str) -> dict:
+    """Return the contracted joint-space waypoint for `foot` ('FL'|'FR'|'BL'|'BR').
+
+    Used by sequences.py:lift_phase (and TODO: swing/orient) to drive the leg
+    into a folded configuration before the wall reach. The dict maps joint name
+    -> target qpos (radians); the joint-keypoint task in IKSolver applies it
+    on top of the EE Cartesian task.
+    """
+    if foot not in _CONTRACTED_POSES:
+        raise KeyError(f"contracted_pose: unknown foot '{foot}'")
+    return dict(_CONTRACTED_POSES[foot])  # copy so callers can't mutate the source
 
 
 def _rodrigues(v, k, theta_deg):

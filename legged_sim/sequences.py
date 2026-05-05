@@ -20,7 +20,12 @@ from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
+
+# DONE: pull leg-agnostic contracted-pose builder from config so sequences
+# only know joint *names*, never specific numeric values. This keeps the
+# joint-keypoint framework reusable across legs and across robots.
+from config import contracted_pose
 
 
 # ── IK target ─────────────────────────────────────────────────────────────────
@@ -31,11 +36,29 @@ class IKTarget:
 
     face_axis: world-frame direction that EE local -Y should point toward.
                None means no orientation constraint.
+    joint_targets: optional joint-space waypoint applied on top of the EE
+               task. Maps joint name -> target qpos (radians for hinges).
+               Joints not listed are unconstrained by this task. Empty/None
+               disables the joint-space task entirely. The framework is
+               leg-agnostic: any subset of model joints may be specified.
+    joint_cost: scalar cost applied uniformly to every joint listed in
+               joint_targets. Tune relative to position_cost / orientation_cost
+               to balance Cartesian vs joint-space tracking.
     """
     position:         np.ndarray
     position_cost:    float                = 10.0
     face_axis:        Optional[np.ndarray] = None   # world dir for EE local -Y
     orientation_cost: float                = 0.0
+    # ── DONE: joint-space directive (universal across joints / legs) ──────────
+    joint_targets:    Optional[Dict[str, float]] = None
+    joint_cost:       float                = 5.0
+
+    # ── DONE: direct PID bypass — skips IK solve entirely ────────────────────
+    # Maps joint name -> target qpos (rad). When set, sim.py skips the QP
+    # solve and writes these values directly as PID position references.
+    # All other joints hold their last ctrl_targets value. IK framework stays
+    # intact — this is purely a bypass path for tuning without IK interference.
+    ctrl_override:    Optional[Dict[str, float]] = None
 
     # ── convenience constructors ──────────────────────────────────────────────
 
@@ -54,6 +77,25 @@ class IKTarget:
             orientation_cost=ori_cost,
         )
 
+    @staticmethod
+    def with_joint_targets(pos: np.ndarray,
+                           joint_targets: Dict[str, float],
+                           joint_cost: float = 5.0,
+                           pos_cost: float = 1.0,
+                           face_axis: Optional[np.ndarray] = None,
+                           ori_cost: float = 0.0) -> "IKTarget":
+        """EE position + joint-space waypoint. Default pos_cost is intentionally
+        low so the joint task dominates; raise it to blend the two.
+        """
+        return IKTarget(
+            position=np.asarray(pos, float),
+            position_cost=pos_cost,
+            face_axis=np.asarray(face_axis, float) if face_axis is not None else None,
+            orientation_cost=ori_cost,
+            joint_targets=dict(joint_targets),
+            joint_cost=joint_cost,
+        )
+
 
 # ── phase context ──────────────────────────────────────────────────────────────
 
@@ -62,16 +104,20 @@ class PhaseContext:
     """Typed context injected into every phase callback.
 
     ee_pos_fn and hip_pivot_fn are refreshed each step by SequenceRunner.step().
+    joint_qpos_fn returns the current qpos value (rad/m) for a named joint;
+        used by phases that capture on-entry joint values to interpolate from.
     shared is a free dict for cross-phase communication (e.g. f2w_measure → f2w_reach).
     """
     foot:              str
     ee_home:           np.ndarray
     ee_pos_fn:         Callable[[], np.ndarray]
     hip_pivot_fn:      Callable[[], np.ndarray]
-    wall_dist_fn:      Optional[Callable]        = None
-    magnet_disable_fn: Optional[Callable]        = None
-    magnet_enable_fn:  Optional[Callable]        = None
-    shared:            dict                      = field(default_factory=dict)
+    wall_dist_fn:      Optional[Callable]              = None
+    magnet_disable_fn: Optional[Callable]              = None
+    magnet_enable_fn:  Optional[Callable]              = None
+    # ── DONE: joint-space readback (set by sim.py:_start_runner_for) ──────────
+    joint_qpos_fn:     Optional[Callable[[str], float]] = None
+    shared:            dict                            = field(default_factory=dict)
 
     # ── convenience methods ───────────────────────────────────────────────────
 
@@ -80,6 +126,11 @@ class PhaseContext:
 
     def hip_pivot(self) -> np.ndarray:
         return self.hip_pivot_fn()
+
+    def joint_qpos(self, name: str) -> float:
+        if self.joint_qpos_fn is None:
+            raise RuntimeError("joint_qpos_fn not wired into PhaseContext")
+        return self.joint_qpos_fn(name)
 
     def magnet_disable(self):
         if self.magnet_disable_fn:
@@ -120,19 +171,59 @@ def _smooth(t_rel: float, duration: float, q0, q1):
 
 # ── floor-motion phase factories ───────────────────────────────────────────────
 
-def lift_phase(height: float = 0.10, duration: float = 3.0) -> Phase:
-    """Raise EE straight up by `height` from its settle position. Disables swing magnet on entry."""
-    start = np.zeros(3)
+def lift_phase(height: float = 0.10, duration: float = 3.0,
+               joint_targets: Optional[Dict[str, float]] = None,
+               joint_cost: float = 5.0,
+               position_cost: float = 10.0) -> Phase:
+    """Raise EE straight up by `height` from its settle position. Disables
+    swing magnet on entry.
+
+    DONE: optionally drives a set of named joints to target qpos values over
+    the same duration via a quintic smooth-step. Each joint's start value is
+    captured from live qpos on phase entry, so the motion always begins from
+    wherever the chain currently sits.
+
+    Tips
+    ----
+    - To let joints dominate (the contracted-pose case), pass a low
+      `position_cost` (e.g. 1.0). The EE target then acts as a soft hint and
+      the chain folds primarily under the joint task.
+    - To keep the EE strict and add a mild joint bias, pass position_cost=10.0
+      with a small joint_cost (e.g. 1–2) — the joint targets become a tie-breaker.
+    - The framework is universal: any joint name(s) accepted by the model may
+      be specified. Not just knee/wrist/EE.
+    """
+    start  = np.zeros(3)
+    q0     : Dict[str, float] = {}      # captured on entry, per active joint
 
     def on_enter(ctx: PhaseContext):
-        nonlocal start
+        nonlocal start, q0
         start = ctx.ee_pos().copy()
         ctx.magnet_disable()
+        q0 = {}
+        if joint_targets:
+            for jname in joint_targets:
+                try:
+                    q0[jname] = ctx.joint_qpos(jname)
+                except Exception as e:
+                    print(f"  [lift] WARN could not read joint '{jname}': {e}")
+            print(f"  [lift] joint path  start={ {k: round(v,3) for k,v in q0.items()} }"
+                  f"  goal={ {k: round(v,3) for k,v in joint_targets.items()} }")
 
     def step(t: float, ctx: PhaseContext) -> IKTarget:
         target = start.copy()
         target[2] += _smooth(t, duration, 0.0, height)
-        return IKTarget.position_only(target)
+
+        if joint_targets and q0:
+            joint_now = {jn: float(_smooth(t, duration, q0[jn], joint_targets[jn]))
+                         for jn in q0}
+            return IKTarget(
+                position=target,
+                position_cost=position_cost,
+                joint_targets=joint_now,
+                joint_cost=joint_cost,
+            )
+        return IKTarget.position_only(target, position_cost)
 
     return Phase("LIFT", duration, step, on_enter=on_enter)
 
@@ -338,6 +429,64 @@ def f2w_reach_phase(wall_normal: Optional[np.ndarray] = None,
     return Phase("F2W_REACH", duration, step, on_enter=on_enter, unbounded=True)
 
 
+def joint_phase(joint_targets: Dict[str, float],
+                duration: float = 3.0,
+                height: float = 0.0,
+                disable_magnet: bool = False,
+                enable_magnet: bool = False,
+                unbounded: bool = False) -> Phase:
+    """Drive named joints directly to target qpos via PID, bypassing IK entirely.
+
+    Universal drop-in for any position in any sequence. Can replace or precede
+    IK-based phases — the ctrl_override flag in IKTarget is checked every tick
+    in sim.py regardless of which sequence is running.
+
+    Parameters
+    ----------
+    joint_targets   joint name -> target qpos (rad). Start values captured from
+                    live qpos on phase entry and quintic-smooth-stepped to targets.
+    duration        phase duration in seconds.
+    height          optional vertical EE lift (m) smooth-stepped alongside joints.
+                    The EE position in IKTarget is a dummy when ctrl_override is
+                    set — but height here drives the hip/knee combination via the
+                    same PID bypass, not via IK. Set to 0 (default) to fold in place.
+    disable_magnet  if True, disables swing foot magnet on entry.
+    enable_magnet   if True, enables swing foot magnet on entry.
+    unbounded       if True, holds at final pose indefinitely after duration.
+    """
+    q0: Dict[str, float] = {}
+    ee_start = np.zeros(3)
+
+    def on_enter(ctx: PhaseContext):
+        nonlocal q0, ee_start
+        ee_start = ctx.ee_pos().copy()
+        if disable_magnet:
+            ctx.magnet_disable()
+        if enable_magnet:
+            ctx.magnet_enable()
+        q0 = {}
+        for jname in joint_targets:
+            try:
+                q0[jname] = ctx.joint_qpos(jname)
+            except Exception as e:
+                print(f"  [joint_phase] WARN could not read joint '{jname}': {e}")
+        print(f"  [joint_phase] direct PID — "
+              f"height={height:.3f}m  "
+              f"start={ {k: round(v, 3) for k, v in q0.items()} } "
+              f"goal={ {k: round(v, 3) for k, v in joint_targets.items()} }")
+
+    def step(t: float, ctx: PhaseContext) -> IKTarget:
+        override = {jn: float(_smooth(t, duration, q0[jn], joint_targets[jn]))
+                    for jn in q0}
+        # EE position is carried for telemetry / pos_err display only.
+        # sim.py does NOT feed it to the QP when ctrl_override is set.
+        ee_target = ee_start.copy()
+        ee_target[2] += _smooth(t, duration, 0.0, height)
+        return IKTarget(position=ee_target, ctrl_override=override)
+
+    return Phase("JOINT", duration, step, on_enter=on_enter, unbounded=unbounded)
+
+
 # ── sequences ─────────────────────────────────────────────────────────────────
 
 SEQUENCES = {
@@ -375,6 +524,19 @@ SEQUENCES = {
                           position_cost=8.0, orientation_cost=50.0),
         f2w_reach_phase(wall_normal=[+1.0, 0.0, 0.0], duration=2.0,
                         position_cost=8.0, orientation_cost=50.0),
+    ],
+
+    # ── direct joint-position tuning test (no IK) ────────────────────────────
+    # Uses joint_phase: bypasses IK entirely, drives joints straight to
+    # contracted_pose('FL') via PID. No EE Cartesian constraint — pure joint
+    # position control. After 3 s the leg holds at the final angles.
+    # Once the pose looks right, copy the angles into config.py and switch
+    # back to lift_phase with joint_targets for the full blended version.
+    #
+    # Run with:  python sim.py --sequence f2w_test
+    "f2w_test": [
+        joint_phase(joint_targets=contracted_pose('FL'), duration=3.0,
+                    disable_magnet=True, unbounded=True),
     ],
 }
 

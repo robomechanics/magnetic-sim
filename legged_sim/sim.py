@@ -106,7 +106,7 @@ def setup_model():
 
     root_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "root")
     if root_jid != -1:
-        data.qpos[model.jnt_qposadr[root_jid]] += 2.05
+        data.qpos[model.jnt_qposadr[root_jid]] += 2.1 # Spawn offset
         mujoco.mj_forward(model, data)
 
     plate_ids = set()
@@ -166,8 +166,40 @@ class IKSolver:
         self.stance_se3      = {}   # foot → 4×4 matrix for wall-planted feet (pos + rot)
         self._ori_target_rot = None # cached rotation for the current orientation phase
 
+        # ── DONE: joint-keypoint task (universal across joints / legs) ────────
+        # Built lazily by _ensure_joint_task when a phase emits IKTarget.joint_targets.
+        # Rebuilt only when the active joint set OR the scalar joint_cost changes
+        # (mink bakes per-DOF cost at construction). Targets are updated each tick.
+        self.joint_task     = None
+        self._joint_task_key: tuple = ((), 0.0)
+
     def ee_pos(self, data, foot) -> np.ndarray:
         return data.xpos[self.ee_bids[foot]].copy()
+
+    def joint_qpos(self, data, name: str) -> float:
+        """Read current qpos for a named joint. Used by phases that capture
+        on-entry joint values for joint-space smooth-stepping."""
+        jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        if jid < 0:
+            raise KeyError(f"joint_qpos: unknown joint '{name}'")
+        return float(data.qpos[self.model.jnt_qposadr[jid]])
+
+    def _ensure_joint_task(self, dof_adrs: list, joint_cost: float):
+        """Build/rebuild self.joint_task if the active DOF set or scalar cost
+        changed. mink's PostureTask bakes the per-DOF cost vector at __init__,
+        so any change to the cost pattern requires reconstruction. Targets are
+        updated separately via set_target each tick (cheap, no rebuild)."""
+        key = (tuple(sorted(int(a) for a in dof_adrs)), float(joint_cost))
+        if key == self._joint_task_key:
+            return
+        cost_vec = np.zeros(self.model.nv)
+        for adr in dof_adrs:
+            cost_vec[int(adr)] = joint_cost
+        self.joint_task = mink.PostureTask(
+            model=self.model, cost=cost_vec, lm_damping=IK_DAMPING)
+        self._joint_task_key = key
+        print(f"[ik] joint_task rebuilt: {len(dof_adrs)} active DOFs, "
+              f"cost={joint_cost}  dofs={list(self._joint_task_key[0])}")
 
     def lock_stance_orientation(self, data, foot):
         """Snapshot full SE3 for a wall-planted foot so IK holds both pos and rot."""
@@ -251,7 +283,29 @@ class IKSolver:
                 self.foot_tasks[foot].set_target(_se3_pos(self.stance_targets[foot]))
                 self.foot_tasks[foot].position_cost = 50.0
 
+        # ── DONE: joint-space directive (universal joint-keypoint task) ───────
+        # When IKTarget carries joint_targets, build a per-DOF-cost PostureTask
+        # whose target qpos copies live qpos for every DOF except the listed
+        # joints (which are overwritten with the requested values). Inactive
+        # DOFs get cost 0, so their target value is irrelevant.
+        joint_active = bool(target.joint_targets)
+        if joint_active:
+            target_q   = phys_data.qpos.copy()
+            dof_adrs   = []
+            for jname, jval in target.joint_targets.items():
+                jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+                if jid < 0:
+                    print(f"[ik] WARN joint '{jname}' not found in model; skipping")
+                    continue
+                target_q[self.model.jnt_qposadr[jid]] = float(jval)
+                dof_adrs.append(self.model.jnt_dofadr[jid])
+            self._ensure_joint_task(dof_adrs, target.joint_cost)
+            self.joint_task.set_target(target_q)
+            joint_active = bool(dof_adrs)   # downgrade if every name was bogus
+
         tasks = [self.body_task] + [self.foot_tasks[f] for f in FEET] + [self.posture_task]
+        if joint_active:
+            tasks.append(self.joint_task)
 
         for _ in range(n_iter):
             self.config.update(ik_qpos)
@@ -484,6 +538,8 @@ def main():
             wall_dist_fn=_wall_dist_fn,
             magnet_disable_fn=lambda: swing_off.add(swing_mag_bid_ref[0]),
             magnet_enable_fn=lambda: swing_off.discard(swing_mag_bid_ref[0]),
+            # DONE: joint-space readback for phases driving joint waypoints
+            joint_qpos_fn=lambda jname: ik.joint_qpos(data, jname),
         )
         runner.start(t, ctx)
         print(f"\n── starting {seq_name} for {foot} ──  phases={len(SEQUENCES[seq_name])}")
@@ -568,7 +624,27 @@ def main():
                     ee_pos_fn=lambda: ik.ee_pos(data, swing_foot_ref[0]),
                     hip_pivot_fn=lambda: data.xanchor[hip_jid_ref[0]].copy(),
                 )
-                ctrl_targets = ik.solve(ik_target, data, IK_EVERY_N * TIMESTEP, swing_foot=sf)
+
+                if ik_target.ctrl_override:
+                    # ── DONE: direct PID bypass — universal across all sequences ──
+                    # Any phase in any sequence can return an IKTarget with
+                    # ctrl_override set. This check runs every IK tick regardless
+                    # of which sequence is active. Listed joints get their values
+                    # written directly into ctrl_targets (the PID position reference).
+                    # Unlisted joints keep their last ctrl_targets value — stance
+                    # feet and other legs are completely unaffected.
+                    for jname, jval in ik_target.ctrl_override.items():
+                        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+                        if jid < 0:
+                            print(f"[bypass] WARN joint '{jname}' not in model")
+                            continue
+                        qadr = model.jnt_qposadr[jid]
+                        for i, cjid in enumerate(ik.ctrl_jids):
+                            if model.jnt_qposadr[cjid] == qadr:
+                                ctrl_targets[i] = jval
+                                break
+                else:
+                    ctrl_targets = ik.solve(ik_target, data, IK_EVERY_N * TIMESTEP, swing_foot=sf)
 
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
         mujoco.mj_step(model, data)
