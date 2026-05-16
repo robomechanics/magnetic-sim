@@ -20,12 +20,34 @@ from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional
+from enum import Enum
+from typing import Callable, Dict, Optional, Tuple
 
 # DONE: pull leg-agnostic contracted-pose builder from config so sequences
 # only know joint *names*, never specific numeric values. This keeps the
 # joint-keypoint framework reusable across legs and across robots.
 from config import contracted_pose
+
+
+# ── control mode ───────────────────────────────────────────────────────────────
+
+class ControlMode(Enum):
+    """Which control path an IKTarget activates in sim.py.
+
+    C1 — IK with per-phase relaxed joint limits (jnt_range_override).
+         Solver routes through configurations normally blocked by XML range=.
+         Use for Step 2 / Step 3 of f2w where FL needs extended reach.
+
+    C2 — Pure IK, default joint limits enforced.
+         Standard mink QP solve. All existing phases use this mode.
+
+    C3 — Direct joint PID, IK solve skipped entirely.
+         ctrl_override dict written straight to PID position references.
+         Use for Step 1 of f2w (contracted pose) and joint tuning.
+    """
+    C1 = "C1"
+    C2 = "C2"
+    C3 = "C3"
 
 
 # ── IK target ─────────────────────────────────────────────────────────────────
@@ -60,11 +82,83 @@ class IKTarget:
     # intact — this is purely a bypass path for tuning without IK interference.
     ctrl_override:    Optional[Dict[str, float]] = None
 
+    # ── control mode + per-phase joint limit override (T1) ────────────────────
+    # control_mode identifies which sim.py dispatch path this target uses.
+    # Set explicitly via the control1/2/3 named constructors — never inferred.
+    control_mode:      ControlMode                              = ControlMode.C2
+    # jnt_range_override: used by Control 1 only.
+    # Maps joint name -> (lo_rad, hi_rad). IKSolver temporarily widens these
+    # joints' ConfigurationLimit ranges for the duration of this IK solve,
+    # then restores defaults. Cached by frozenset — only rebuilt on change.
+    jnt_range_override: Optional[Dict[str, Tuple[float, float]]] = None
+
+    # ── T2: per-phase body task target override ───────────────────────────────
+    # 4×4 SE3 matrix (float64) commanding the main_frame body pose for this
+    # tick. When set, IKSolver.solve() calls body_task.set_target(...) with
+    # this matrix every tick, overriding the settled snapshot. When None,
+    # the settled body SE3 (from record_stance) is restored each tick.
+    # Store as np.ndarray to keep mink out of sequences.py; conversion to
+    # mink.SE3 happens inside IKSolver.solve().
+    body_target_se3:   Optional[np.ndarray]                    = None
+
     # ── convenience constructors ──────────────────────────────────────────────
 
     @staticmethod
+    def control1(pos: np.ndarray,
+                 jnt_range_override: Dict[str, Tuple[float, float]],
+                 face_axis: Optional[np.ndarray] = None,
+                 pos_cost: float = 8.0,
+                 ori_cost: float = 0.0,
+                 joint_targets: Optional[Dict[str, float]] = None,
+                 joint_cost: float = 5.0,
+                 body_target_se3: Optional[np.ndarray] = None) -> "IKTarget":
+        """Control 1 — IK with per-phase relaxed joint limits."""
+        return IKTarget(
+            position=np.asarray(pos, float),
+            position_cost=pos_cost,
+            face_axis=np.asarray(face_axis, float) if face_axis is not None else None,
+            orientation_cost=ori_cost,
+            joint_targets=joint_targets,
+            joint_cost=joint_cost,
+            jnt_range_override=dict(jnt_range_override),
+            control_mode=ControlMode.C1,
+            body_target_se3=body_target_se3,
+        )
+
+    @staticmethod
+    def control2(pos: np.ndarray,
+                 face_axis: Optional[np.ndarray] = None,
+                 pos_cost: float = 10.0,
+                 ori_cost: float = 0.0,
+                 joint_targets: Optional[Dict[str, float]] = None,
+                 joint_cost: float = 5.0,
+                 body_target_se3: Optional[np.ndarray] = None) -> "IKTarget":
+        """Control 2 — pure IK, default joint limits."""
+        return IKTarget(
+            position=np.asarray(pos, float),
+            position_cost=pos_cost,
+            face_axis=np.asarray(face_axis, float) if face_axis is not None else None,
+            orientation_cost=ori_cost,
+            joint_targets=joint_targets,
+            joint_cost=joint_cost,
+            control_mode=ControlMode.C2,
+            body_target_se3=body_target_se3,
+        )
+
+    @staticmethod
+    def control3(pos: np.ndarray,
+                 joint_targets: Dict[str, float]) -> "IKTarget":
+        """Control 3 — direct joint PID, IK solve skipped entirely."""
+        return IKTarget(
+            position=np.asarray(pos, float),
+            ctrl_override=dict(joint_targets),
+            control_mode=ControlMode.C3,
+        )
+
+    @staticmethod
     def position_only(pos: np.ndarray, cost: float = 10.0) -> "IKTarget":
-        return IKTarget(position=np.asarray(pos, float), position_cost=cost)
+        return IKTarget(position=np.asarray(pos, float), position_cost=cost,
+                        control_mode=ControlMode.C2)
 
     @staticmethod
     def with_orientation(pos: np.ndarray, face_axis: np.ndarray,
@@ -75,6 +169,7 @@ class IKTarget:
             position_cost=pos_cost,
             face_axis=np.asarray(face_axis, float),
             orientation_cost=ori_cost,
+            control_mode=ControlMode.C2,
         )
 
     @staticmethod
@@ -84,9 +179,7 @@ class IKTarget:
                            pos_cost: float = 1.0,
                            face_axis: Optional[np.ndarray] = None,
                            ori_cost: float = 0.0) -> "IKTarget":
-        """EE position + joint-space waypoint. Default pos_cost is intentionally
-        low so the joint task dominates; raise it to blend the two.
-        """
+        """C2: EE position + joint-space waypoint blended via IK."""
         return IKTarget(
             position=np.asarray(pos, float),
             position_cost=pos_cost,
@@ -94,6 +187,7 @@ class IKTarget:
             orientation_cost=ori_cost,
             joint_targets=dict(joint_targets),
             joint_cost=joint_cost,
+            control_mode=ControlMode.C2,
         )
 
 
@@ -479,10 +573,10 @@ def joint_phase(joint_targets: Dict[str, float],
         override = {jn: float(_smooth(t, duration, q0[jn], joint_targets[jn]))
                     for jn in q0}
         # EE position is carried for telemetry / pos_err display only.
-        # sim.py does NOT feed it to the QP when ctrl_override is set.
+        # sim.py does NOT feed it to the QP when control_mode == C3.
         ee_target = ee_start.copy()
         ee_target[2] += _smooth(t, duration, 0.0, height)
-        return IKTarget(position=ee_target, ctrl_override=override)
+        return IKTarget.control3(pos=ee_target, joint_targets=override)
 
     return Phase("JOINT", duration, step, on_enter=on_enter, unbounded=unbounded)
 

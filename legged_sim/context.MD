@@ -326,21 +326,17 @@ The single-`joint_phase` `"f2w_test"` above is a stepping stone. The full plan s
 
 | # | Name | Status | Mechanism | Existing analog |
 |---|---|---|---|---|
-| **Control 1** | IK setpoints **with relaxed per-phase joint limits** | ⚠️ **TODO: NOT YET IMPLEMENTED** | Standard EE position IK, but the `mink.ConfigurationLimit` range is **temporarily widened** for the duration of the phase to let the solver route around obstacles (wall, floor, robot self-collision) during transient motion. | none — needs new infrastructure |
-| **Control 2** | Pure IK | ✅ implemented | Standard `IKTarget.position` (+ optional `face_axis` / `orientation_cost`) drives mink. | `lift_phase`, `swing_phase`, `reach_phase`, `f2w_orient_phase`, `f2w_reach_phase` |
-| **Control 3** | Pure joint-angle position control (no IK) | ✅ implemented | `IKTarget.ctrl_override` skips `ik.solve()` entirely; PID drives joints to commanded qpos directly. Quintic-smooth-stepped from live `qpos`. | `joint_phase` (line 261) |
+| **Control 1** | IK setpoints **with relaxed per-phase joint limits** | ✅ **implemented** | `IKTarget.control1(jnt_range_override=...)` — `IKSolver.solve()` temporarily widens `model.jnt_range` to build a cached `ConfigurationLimit`, restores defaults immediately. Dispatch via `ControlMode.C1`. | `IKTarget.control1(...)` |
+| **Control 2** | Pure IK | ✅ implemented | `IKTarget.control2(...)` drives mink with default limits. | `lift_phase`, `swing_phase`, `f2w_orient_phase`, `f2w_reach_phase` |
+| **Control 3** | Pure joint-angle position control (no IK) | ✅ implemented | `IKTarget.control3(...)` sets `ctrl_override`; `sim_step` dispatches on `ControlMode.C3`, skips IK solve entirely. | `joint_phase` |
 
 ###### Why Control 1 is needed
 
 The XML `range=` attributes on each joint are tuned for **stable nominal poses** (hip ±45°, knee ±130°, wrist ±57°). During Step 2 / Step 3 of the f2w transition, the FL leg has to pass through configurations that are blocked by these defaults — knee/wrist need to swing past their nominal limits to clear the body and wall. Hard-relaxing the limits in the XML would compromise stability everywhere else in the sim; the limits must be **scoped to the active phase**.
 
-###### Implementation hints for Control 1 (future worker)
+###### Implementation (done — Option 2)
 
-The current IK pipeline (`sim.py:IKSolver._compute_tasks`) constructs `mink.ConfigurationLimit(model)` once and reuses it. Three options to make this per-phase:
-
-1. **Mutate `model.jnt_range` at phase enter/exit.** Cheap but invasive; must restore on phase exit. Risk: any other consumer of `model.jnt_range` sees the relaxed values during the phase.
-2. **Add a new `IKTarget.jnt_range_override: Dict[str, (low_rad, high_rad)] | None` field.** In `_compute_tasks`, rebuild `ConfigurationLimit` whenever the dict changes (cache-key it like `_joint_task` does with `frozenset`). This is the recommended approach — symmetric with the existing `joint_targets` / `joint_cost` pattern. **TODO: NEED CLEARING — confirm with Aaron / Nadan.**
-3. **Subclass `mink.Limit`** to read per-phase ranges from `IKTarget`. Cleanest API but most code; only worth it if Option 2 turns out to be tangled with mink internals.
+`IKTarget.jnt_range_override: Dict[str, Tuple[float, float]]` field added. In `IKSolver.solve()`, when set: temporarily mutates `model.jnt_range` for the listed joints, constructs a new `ConfigurationLimit`, restores defaults immediately. Cache-keyed by `frozenset` — only rebuilt when the dict changes. Verified via `test_T1.py` (6/6 structural checks passed). Visual confirmation deferred to T6/T7.
 
 ##### Coordinate convention (applies to all 3 steps)
 
@@ -376,24 +372,22 @@ Pull the FL leg in toward the body so it does not collide with the wall during t
 
 ###### Implementation checklist
 
-1. **Add `STEP1_POSE_FL` to `config.py`** mirroring the existing `CONTRACTED_POSE_FL` pattern:
+1. **`CONTRACTED_POSE_FL` in `config.py`** — confirmed and written (this is `STEP1_POSE_FL`):
    ```python
-   STEP1_POSE_FL = {
-       'hip_pitch_FL': math.radians(+45.0),    # TODO: NEED CLEARING — sign for "outward CCW" (FL)
-       'knee_FL':      math.radians(?),        # TODO: NEED CLEARING — magnitude + sign for "back-bend up CCW"
-       'wrist_FL':     math.radians(?),        # TODO: NEED CLEARING — magnitude + sign for "swing down CW"
-       'ee_FL':        math.radians(?),        # TODO: NEED CLEARING — angle that makes EE plate ∥ floor
+   CONTRACTED_POSE_FL = {
+       'hip_pitch_FL': +np.radians(45),   # ✓ +45° swings leg toward +Y (away from wall)
+       'knee_FL':      +np.radians(90),   # ✓ +90° folds knee tip upward (back-bend)
+       'wrist_FL':     -np.radians(90),   # ✓ −90° folds wrist tip down and back toward body
+       'ee_FL':         0.0,              # ✓ 0° → EE local +Y = world −Z (face-down)
    }
    ```
-2. **Determine the unknown signs/magnitudes empirically** in the viewer, one joint at a time. Use the existing `joint_phase` plumbing — set a single joint, watch the result.
-3. **Wire into `SEQUENCES['f2w_test']`** in `sequences.py`: replace the current single-phase list with the multi-phase list sketched at the bottom of this section.
-4. Hold magnet **disabled** (FL is leaving the floor for the rest of the transition).
+   > Face-down chosen — magnet is disabled during Step 1 so floor adhesion is not a concern.
+2. **`SEQUENCES['f2w_test']`** — already wired via `joint_phase(joint_targets=contracted_pose('FL'), disable_magnet=True, unbounded=True)`. No changes to `sequences.py` needed.
+3. Magnet disabled on entry. ✓
 
 ###### Open items
 
-- > **TODO: NEED CLEARING** — Hip `+45°` is described as "outward CCW"; confirm whether the user means `+45°` or `−45°` about body Z for FL specifically (FL sits at `(+0.0965, +0.092)` so "outward" is ambiguous between +X and +Y biases).
-- > **TODO: NEED CLEARING** — "EE parallel with floor" admits two solutions (magnet face up vs face down). Pick one — likely face-up (magnet pointing world +Z) so the magnet is shielded from the floor during transit.
-- > **TODO: NEED CLEARING** — Step 1 duration; current `joint_phase` default is 3.0 s. Probably fine but worth verifying nothing collides during the contraction sweep.
+~~None — Step 1 is complete. Validated in viewer (test_T4.py): no self-collision during 3.0 s sweep, leg tucks cleanly toward +Y.~~
 
 ---
 
@@ -519,21 +513,21 @@ SEQUENCES['f2w_test'] = [
 
 | # | Item | File(s) | Blocking? |
 |---|---|---|---|
-| T1 | Per-phase joint-limit override (Control 1 infrastructure) | `sim.py:IKSolver`, `sequences.py:IKTarget` | **Yes** — Steps 2 & 3 cannot run without it |
-| T2 | Body-task target override mechanism (`body_target_se3` on `IKTarget`) | `sim.py:IKSolver`, `sequences.py:IKTarget` | **Yes** — Step 2 body tilt needs it |
-| T3 | FL-decoupling strategy for body task (cost imbalance vs FL-pin posture sub-task vs two-pass) | design decision (Aaron / Nadan) | **Yes** — affects Step 2 correctness |
-| T4 | `STEP1_POSE_FL` joint angle values + signs (CCW/CW) | `config.py`, viewer-driven tuning | **Yes** — Step 1 |
+| ~~T1~~ | ~~Per-phase joint-limit override (Control 1 infrastructure)~~ | ~~`sim.py:IKSolver`, `sequences.py:IKTarget`~~ | ✓ **Done** — `ControlMode` enum + `jnt_range_override` + named constructors; `sim_step` dispatch updated |
+| ~~T2~~ | ~~Body-task target override mechanism (`body_target_se3` on `IKTarget`)~~ | ~~`sim.py:IKSolver`, `sequences.py:IKTarget`~~ | ✓ **Done** — `_settled_body_T` stored; `body_target_se3` overrides per-tick; verified 9/9 + visual |
+| ~~T3~~ | ~~FL-decoupling strategy for body task~~ | ~~design decision~~ | ✓ **Done** — Option 1 (cost imbalance): FL `pos_cost=200`, body/stance `cost=50`. Verified: body tilt executes, FL stays planted. Wire into `extend_and_tilt_phase` at T7. |
+| ~~T4~~ | ~~`STEP1_POSE_FL` joint angle values + signs~~ | ~~`config.py`, viewer-driven tuning~~ | ✓ **Done** — written as `CONTRACTED_POSE_FL`; `f2w_test` already wired via `joint_phase`; validated in viewer |
 | T5 | `STEP2_FL_EE_POS` pre-reach target | `config.py`, derive from `f2w_orient` formula | **Yes** — Step 2 |
 | T6 | `STEP2_FL_LIMITS`, `STEP3_FL_LIMITS` relaxed-range dicts | `config.py` | **Yes** — Steps 2 & 3 |
 | T7 | New phase factories: `extend_and_tilt_phase`, `f2w_reach_relaxed_phase` | `sequences.py` | **Yes** — Steps 2 & 3 |
-| T8 | EE "parallel with floor" disambiguation (face-up vs face-down) | design decision | Step 1 |
-| T9 | Sign of "CCW/CW" for each FL joint relative to its declared axis | `config.py` comments + viewer test | Step 1 |
-| T10 | Body rotation composition order (`body_R0 @ Ry(−30°)` vs `Ry(−30°) @ body_R0`) | sequence factory | Step 2 |
+| ~~T8~~ | ~~EE "parallel with floor" disambiguation (face-up vs face-down)~~ | ~~design decision~~ | ✓ **Done** — face-down, `ee_FL = 0°` |
+| ~~T9~~ | ~~Sign of "CCW/CW" for each FL joint relative to its declared axis~~ | ~~`config.py` comments + viewer test~~ | ✓ **Done** — all four joints confirmed in viewer |
+| ~~T10~~ | ~~Body rotation composition order~~ | ~~sequence factory~~ | ✓ **Done** — `Ry(−30°) @ body_R0` (world-frame left-multiply) confirmed in viewer |
 | T11 | Step 2 timeline: simultaneous tilt+extend vs sequential | design decision | Step 2 |
 
 ##### Recommended implementation order
 
-1. **T4, T8, T9** — finish Step 1 first. It's pure Control 3 and uses only existing infrastructure. Validates joint sign/axis conventions before any IK changes.
+1. ~~**T4, T8, T9**~~ ✓ **Done.**
 2. **T1** — implement `jnt_range_override` (Option 2: new `IKTarget` field). Smallest IK change; unblocks T6, T7.
 3. **T2** — implement `body_target_se3` (Option A: new `IKTarget` field). Symmetric with T1.
 4. **T3, T11, T10** — design decisions; collect input from Aaron / Nadan in one pass. Implement chosen decoupling strategy.

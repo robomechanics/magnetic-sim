@@ -145,40 +145,20 @@ EE_BAKE_DEG = {'FL': 0.0, 'FR': 0.0, 'BL': 0.0, 'BR': 0.0}
 
 # ── joint-space waypoints (universal joint-keypoint framework) ────────────────
 #
-# DONE: leg-agnostic helper for building a "contracted" joint-space waypoint
-#       used by lift_phase (and later swing/orient) in the f2w sequence.
-#
-# Status: FRAMEWORK VALIDATION MODE. All targets zeroed so the joint task
-#         engages but does nothing (joints already at 0 from settle, gradient
-#         is zero, no fight against the EE task). Use this to confirm
-#         f2w_test gives a clean 10 cm vertical lift. Once that works:
-#
-# TODO: replace the zeros with the real contracted-pose angles. Suggested
-#       staged tuning workflow — DO NOT jump straight to ±π/2 again, that
-#       failed because (a) my sign reasoning for the +X-Y-axis chain was
-#       wrong, and (b) joint_cost dominated position_cost so the leg locked
-#       to a bad pose with no Cartesian rescue.
-#
-#         (1) Set knee_FL = +0.3 rad (~17°), wrist/ee = 0.0. Run f2w_test.
-#             Watch the EE telemetry: which direction does it move?
-#             - EE Δx,Δy NEGATIVE → leg folding INWARD: correct sign, scale up.
-#             - EE Δx,Δy POSITIVE → leg unfolding OUTWARD: flip sign on knee.
-#         (2) Once knee sign is correct, scale to ±0.7 rad, then ±π/2.
-#         (3) Repeat for wrist (Z-fold = opposite sign to knee).
-#         (4) Repeat for ee (rotates magnet face, doesn't move body much).
-#         (5) Mirror correct signs to FR/BL/BR.
+# CONTRACTED_POSE_FL: confirmed via test_T9.py (sign) and test_T4.py (magnitude).
+# All four joints swept in viewer — no self-collision, correct lateral final pose.
 #
 # Joint range reminder (robot.xml):
 #   hip_pitch_*: ±45°   knee_*: ±90°   wrist_*: ±90°   ee_*: ±90°
 #
-# Values are radians. _PI_2 = 90° = hard joint limit for knee/wrist/ee.
+# Values are radians.
 _PI_2 = np.pi / 2
 
 CONTRACTED_POSE_FL = {
-    'hip_pitch_FL': 0.0,                  # anchored — prevents IK using hip as escape valve
-    'knee_FL':  +np.radians(90),          # + lifts lower leg in +Z
-    'wrist_FL': -np.radians(135),         # - Z-fold (limit expanded to ±135°)
-    'ee_FL':    -np.radians(75),          # - magnet face inward
+    'hip_pitch_FL': +np.radians(45),   # CCW from above → leg swings toward +Y (away from wall)
+    'knee_FL':      +np.radians(90),   # + folds knee tip upward (back-bend)
+    'wrist_FL':     -np.radians(90),   # − folds wrist tip down and back toward body
+    'ee_FL':         0.0,              # 0° → EE local +Y = world −Z (face-down; magnet off during Step 1)
 }
 CONTRACTED_POSE_FR = {
     'knee_FR':  +_PI_2,    # TODO: mirror — confirm sign in viewer

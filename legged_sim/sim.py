@@ -28,7 +28,7 @@ from config import (
     KNEE_BAKE_DEG, WRIST_BAKE_DEG, EE_BAKE_DEG,
     bake_joint_angles, SEQUENCE as DEFAULT_SEQUENCE,
 )
-from sequences import SEQUENCES, SequenceRunner, IKTarget, PhaseContext
+from sequences import SEQUENCES, SequenceRunner, IKTarget, PhaseContext, ControlMode
 from viewer import draw_markers, _build_joint_vis
 
 
@@ -166,12 +166,21 @@ class IKSolver:
         self.stance_se3      = {}   # foot → 4×4 matrix for wall-planted feet (pos + rot)
         self._ori_target_rot = None # cached rotation for the current orientation phase
 
-        # ── DONE: joint-keypoint task (universal across joints / legs) ────────
-        # Built lazily by _ensure_joint_task when a phase emits IKTarget.joint_targets.
-        # Rebuilt only when the active joint set OR the scalar joint_cost changes
-        # (mink bakes per-DOF cost at construction). Targets are updated each tick.
+        # ── joint-keypoint task (universal across joints / legs) ────────────
         self.joint_task     = None
         self._joint_task_key: tuple = ((), 0.0)
+
+        # ── T1: per-phase joint-limit override (Control 1) ──────────────────
+        # Default ranges saved once; restored after each C1 solve.
+        # _override_config_limit is rebuilt only when jnt_range_override changes
+        # (cache-keyed by frozenset, same pattern as _joint_task_key).
+        self._default_jnt_range:    np.ndarray                       = model.jnt_range.copy()
+        self._range_override_key:   frozenset                        = frozenset()
+        self._override_config_limit: Optional[mink.ConfigurationLimit] = None
+
+        # ── T2: per-phase body target override ───────────────────────────────
+        # Set by record_stance(); restored each tick when body_target_se3 is None.
+        self._settled_body_T: Optional[np.ndarray] = None
 
     def ee_pos(self, data, foot) -> np.ndarray:
         return data.xpos[self.ee_bids[foot]].copy()
@@ -220,6 +229,7 @@ class IKSolver:
         T = np.eye(4)
         T[:3, :3] = data.xmat[bid].reshape(3, 3)
         T[:3,  3] = data.xpos[bid]
+        self._settled_body_T = T.copy()   # T2: save for restore when body_target_se3 is None
         self.body_task.set_target(mink.SE3.from_matrix(T))
         print("[ik] stance targets recorded:")
         for f, p in self.stance_targets.items():
@@ -263,8 +273,19 @@ class IKSolver:
         self.foot_tasks[_sf].set_target(target_se3)
         self.foot_tasks[_sf].position_cost = target.position_cost
 
-        # Body orientation competes with EE orientation task — zero it during orient phases.
-        self.body_task.orientation_cost = 0.0 if target.face_axis is not None else 50.0
+        # Body orientation competes with EE orientation task — zero it during
+        # orient phases, UNLESS body_target_se3 is explicitly commanding a pose.
+        if target.face_axis is not None and target.body_target_se3 is None:
+            self.body_task.orientation_cost = 0.0
+        else:
+            self.body_task.orientation_cost = 50.0
+
+        # ── T2: body target override ──────────────────────────────────────────
+        # Every tick: set body task target from IKTarget or fall back to settled.
+        if target.body_target_se3 is not None:
+            self.body_task.set_target(mink.SE3.from_matrix(target.body_target_se3))
+        elif self._settled_body_T is not None:
+            self.body_task.set_target(mink.SE3.from_matrix(self._settled_body_T))
 
         # ── stance feet ────────────────────────────────────────────────────────
         for foot in FEET:
@@ -307,11 +328,34 @@ class IKSolver:
         if joint_active:
             tasks.append(self.joint_task)
 
+        # ── T1: select configuration limit (C1 uses widened ranges) ──────────
+        if target.jnt_range_override:
+            key = frozenset(
+                (jname, lo, hi)
+                for jname, (lo, hi) in target.jnt_range_override.items()
+            )
+            if key != self._range_override_key:
+                # Temporarily widen model.jnt_range to bake a new ConfigurationLimit,
+                # then immediately restore defaults. ConfigurationLimit stores ranges
+                # at construction time, so the model is safe to restore right away.
+                for jname, (lo, hi) in target.jnt_range_override.items():
+                    jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+                    if jid >= 0:
+                        self.model.jnt_range[jid] = [lo, hi]
+                self._override_config_limit = mink.ConfigurationLimit(self.model)
+                self.model.jnt_range[:] = self._default_jnt_range
+                self._range_override_key = key
+                print(f"[ik] C1 limit rebuilt: "
+                      f"{ {k: (round(lo,3), round(hi,3)) for k, (lo, hi) in target.jnt_range_override.items()} }")
+            active_limit = self._override_config_limit
+        else:
+            active_limit = self.config_limit
+
         for _ in range(n_iter):
             self.config.update(ik_qpos)
             vel     = mink.solve_ik(self.config, tasks, dt,
                                     solver="quadprog", damping=IK_DAMPING,
-                                    limits=[self.config_limit])
+                                    limits=[active_limit])
             ik_qpos = self.config.integrate(vel, dt)
 
         ctrl = np.zeros(self.model.nu)
@@ -625,14 +669,10 @@ def main():
                     hip_pivot_fn=lambda: data.xanchor[hip_jid_ref[0]].copy(),
                 )
 
-                if ik_target.ctrl_override:
-                    # ── DONE: direct PID bypass — universal across all sequences ──
-                    # Any phase in any sequence can return an IKTarget with
-                    # ctrl_override set. This check runs every IK tick regardless
-                    # of which sequence is active. Listed joints get their values
-                    # written directly into ctrl_targets (the PID position reference).
-                    # Unlisted joints keep their last ctrl_targets value — stance
-                    # feet and other legs are completely unaffected.
+                if ik_target.control_mode == ControlMode.C3:
+                    # ── Control 3: direct PID bypass (no IK solve) ──────────
+                    # ctrl_override joints written straight to PID position refs.
+                    # Unlisted joints hold their last ctrl_targets value.
                     for jname, jval in ik_target.ctrl_override.items():
                         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
                         if jid < 0:
@@ -644,6 +684,9 @@ def main():
                                 ctrl_targets[i] = jval
                                 break
                 else:
+                    # ── Control 1 / Control 2: IK solve ─────────────────────
+                    # C1: jnt_range_override widens limits inside ik.solve().
+                    # C2: default limits, standard mink QP.
                     ctrl_targets = ik.solve(ik_target, data, IK_EVERY_N * TIMESTEP, swing_foot=sf)
 
         data.ctrl[:] = pid.compute(model, data, ctrl_targets, TIMESTEP)
